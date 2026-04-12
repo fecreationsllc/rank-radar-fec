@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { cleanDomain } from "@/lib/rank-utils";
-import { Check, Copy, Search, X } from "lucide-react";
+import { Check, Copy, Search, X, Loader2, RefreshCw } from "lucide-react";
 
 interface AddClientModalProps {
   open: boolean;
