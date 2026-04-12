@@ -8,6 +8,8 @@ import { ClientDashboard } from "@/components/dashboard/ClientDashboard";
 import { AddClientModal } from "@/components/dashboard/AddClientModal";
 import { Button } from "@/components/ui/button";
 import { Radar } from "lucide-react";
+import { supabase as sb } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export default function Index() {
   const { signOut } = useAuth();
