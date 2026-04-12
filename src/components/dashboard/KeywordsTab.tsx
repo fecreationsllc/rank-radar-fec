@@ -190,6 +190,9 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
         <Button onClick={() => setAddOpen(true)}>
           <Plus className="h-4 w-4 mr-1" /> Add Keywords
         </Button>
+        <Button variant="secondary" onClick={handleSuggest} disabled={suggesting || keywordRows.length === 0}>
+          <Sparkles className="h-4 w-4 mr-1" /> Suggest More
+        </Button>
         <Button variant="outline" onClick={handleSync} disabled={syncing}>
           <RefreshCw className={`h-4 w-4 mr-1 ${syncing ? "animate-spin" : ""}`} /> Sync Now
         </Button>
