@@ -6,6 +6,7 @@ import { Tables } from "@/integrations/supabase/types";
 import { ClientSidebar } from "@/components/dashboard/ClientSidebar";
 import { ClientDashboard } from "@/components/dashboard/ClientDashboard";
 import { AddClientModal } from "@/components/dashboard/AddClientModal";
+import { Button } from "@/components/ui/button";
 import { Radar } from "lucide-react";
 
 export default function Index() {
@@ -55,6 +56,7 @@ export default function Index() {
               <Radar className="h-12 w-12 mx-auto text-muted-foreground/50" />
               <p className="text-lg font-medium">No clients yet</p>
               <p className="text-sm">Add your first client to start tracking rankings.</p>
+              <Button onClick={() => setAddClientOpen(true)} className="mt-4">+ Add Client</Button>
             </div>
           </div>
         )}
