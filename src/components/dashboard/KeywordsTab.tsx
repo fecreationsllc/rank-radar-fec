@@ -12,7 +12,8 @@ import { getRankChange } from "@/lib/rank-utils";
 import { AddKeywordsModal } from "@/components/dashboard/AddKeywordsModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, RefreshCw, Search, TrendingUp, TrendingDown, Target, Hash, X } from "lucide-react";
+import { Plus, RefreshCw, Search, TrendingUp, TrendingDown, Target, Hash, X, Sparkles } from "lucide-react";
+import { SuggestKeywordsModal } from "@/components/dashboard/SuggestKeywordsModal";
 import { Badge } from "@/components/ui/badge";
 import { subDays } from "date-fns";
 
@@ -33,6 +34,9 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestedKeywords, setSuggestedKeywords] = useState<string[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -128,6 +132,31 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
     queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
   };
 
+  const handleSuggest = async () => {
+    setSuggestOpen(true);
+    setSuggesting(true);
+    setSuggestedKeywords([]);
+    try {
+      const { data, error } = await supabase.functions.invoke("suggest-more-keywords", {
+        body: { client_id: client.id },
+      });
+      if (error) throw error;
+      setSuggestedKeywords(data?.keywords ?? []);
+    } catch (e) {
+      toast({ title: "Failed to get suggestions", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
+    }
+    setSuggesting(false);
+  };
+
+  const handleAddSuggested = async (keywords: string[]) => {
+    if (!keywords.length) return;
+    const rows = keywords.map(kw => ({ client_id: client.id, keyword: kw }));
+    await supabase.from("keywords").insert(rows);
+    queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
+    setSuggestOpen(false);
+    toast({ title: `Added ${keywords.length} keyword${keywords.length > 1 ? "s" : ""}` });
+  };
+
   const multiCity = cities.length > 1;
 
   if (isLoading) {
@@ -160,6 +189,9 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
         </div>
         <Button onClick={() => setAddOpen(true)}>
           <Plus className="h-4 w-4 mr-1" /> Add Keywords
+        </Button>
+        <Button variant="secondary" onClick={handleSuggest} disabled={suggesting || keywordRows.length === 0}>
+          <Sparkles className="h-4 w-4 mr-1" /> Suggest More
         </Button>
         <Button variant="outline" onClick={handleSync} disabled={syncing}>
           <RefreshCw className={`h-4 w-4 mr-1 ${syncing ? "animate-spin" : ""}`} /> Sync Now
@@ -230,6 +262,14 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
         onOpenChange={setAddOpen}
         clientId={client.id}
         onKeywordsAdded={() => queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] })}
+      />
+
+      <SuggestKeywordsModal
+        open={suggestOpen}
+        onOpenChange={setSuggestOpen}
+        keywords={suggestedKeywords}
+        loading={suggesting}
+        onAdd={handleAddSuggested}
       />
     </div>
   );
