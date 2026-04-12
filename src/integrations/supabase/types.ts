@@ -111,6 +111,45 @@ export type Database = {
           },
         ]
       }
+      keyword_search_volume: {
+        Row: {
+          city_id: string
+          id: string
+          keyword_id: string
+          search_volume: number | null
+          updated_at: string
+        }
+        Insert: {
+          city_id: string
+          id?: string
+          keyword_id: string
+          search_volume?: number | null
+          updated_at?: string
+        }
+        Update: {
+          city_id?: string
+          id?: string
+          keyword_id?: string
+          search_volume?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "keyword_search_volume_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "client_cities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "keyword_search_volume_keyword_id_fkey"
+            columns: ["keyword_id"]
+            isOneToOne: false
+            referencedRelation: "keywords"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       keywords: {
         Row: {
           client_id: string
