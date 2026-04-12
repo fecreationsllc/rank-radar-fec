@@ -168,6 +168,18 @@ serve(async (req) => {
       }
     }
 
+    // Trigger search volume fetch for each client
+    for (const cid of clientIds) {
+      fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/fetch-search-volume`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ client_id: cid }),
+      }).catch(() => {});
+    }
+
     // If 1st of month, trigger suggestions
     const today = new Date();
     if (today.getDate() === 1) {

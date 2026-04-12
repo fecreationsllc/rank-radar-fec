@@ -28,6 +28,7 @@ interface KeywordWithRanks {
   weekAgo: number | null;
   monthAgo: number | null;
   history: (number | null)[];
+  searchVolume: number | null;
 }
 
 export function KeywordsTab({ client }: KeywordsTabProps) {
@@ -61,12 +62,20 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
       const thirtyDaysAgo = subDays(now, 30).toISOString();
 
       const keywordIds = keywords.map((k) => k.id);
-      const { data: history } = await supabase
-        .from("rank_history")
-        .select("*")
-        .in("keyword_id", keywordIds)
-        .gte("checked_at", thirtyDaysAgo)
-        .order("checked_at", { ascending: true });
+      const [historyRes, volumeRes] = await Promise.all([
+        supabase
+          .from("rank_history")
+          .select("*")
+          .in("keyword_id", keywordIds)
+          .gte("checked_at", thirtyDaysAgo)
+          .order("checked_at", { ascending: true }),
+        supabase
+          .from("keyword_search_volume")
+          .select("*")
+          .in("keyword_id", keywordIds),
+      ]);
+      const history = historyRes.data;
+      const volumes = volumeRes.data ?? [];
 
       const rows: KeywordWithRanks[] = [];
       for (const kw of keywords) {
@@ -77,6 +86,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
           const weekRecord = cityHistory.find((h) => new Date(h.checked_at) <= weekAgoDate) ?? cityHistory[0];
           const monthRecord = cityHistory[0];
 
+          const vol = volumes.find((v) => v.keyword_id === kw.id && v.city_id === city.id);
           rows.push({
             keyword: kw,
             city,
@@ -84,6 +94,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
             weekAgo: weekRecord?.position ?? null,
             monthAgo: monthRecord?.position ?? null,
             history: cityHistory.map((h) => h.position),
+            searchVolume: vol?.search_volume ?? null,
           });
         }
       }
@@ -98,6 +109,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
             weekAgo: null,
             monthAgo: null,
             history: [],
+            searchVolume: null,
           });
         }
       }
@@ -214,6 +226,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
               <TableRow>
                 <TableHead>Keyword</TableHead>
                 <TableHead>Landing Page</TableHead>
+                <TableHead>Volume</TableHead>
                 <TableHead>Today</TableHead>
                 <TableHead>Δ Week</TableHead>
                 <TableHead>Last Week</TableHead>
@@ -231,6 +244,9 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
                     <TableCell className="font-medium">{row.keyword.keyword}</TableCell>
                     <TableCell className="text-xs text-muted-foreground max-w-[140px] truncate">
                       {row.keyword.target_url ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {row.searchVolume !== null ? row.searchVolume.toLocaleString() : "—"}
                     </TableCell>
                     <TableCell><PositionBadge position={row.today} /></TableCell>
                     <TableCell>

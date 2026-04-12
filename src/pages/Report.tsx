@@ -43,13 +43,18 @@ export default function Report() {
       const keywords = keywordsRes.data ?? [];
       const cities = citiesRes.data ?? [];
 
-      // Fetch rank history
+      // Fetch rank history and search volumes
       const now = new Date();
       const thirtyDaysAgo = subDays(now, 30).toISOString();
       const keywordIds = keywords.map((k) => k.id);
-      const { data: history } = keywordIds.length > 0
-        ? await supabase.from("rank_history").select("*").in("keyword_id", keywordIds).gte("checked_at", thirtyDaysAgo).order("checked_at", { ascending: true })
-        : { data: [] };
+      const [historyRes, volumeRes] = keywordIds.length > 0
+        ? await Promise.all([
+            supabase.from("rank_history").select("*").in("keyword_id", keywordIds).gte("checked_at", thirtyDaysAgo).order("checked_at", { ascending: true }),
+            supabase.from("keyword_search_volume").select("*").in("keyword_id", keywordIds),
+          ])
+        : [{ data: [] }, { data: [] }];
+      const history = historyRes.data ?? [];
+      const volumes = volumeRes.data ?? [];
 
       // Build rows
       const rows = [];
@@ -58,12 +63,14 @@ export default function Report() {
           const kwHistory = (history ?? []).filter((h) => h.keyword_id === kw.id && h.city_id === city.id);
           const today = kwHistory[kwHistory.length - 1]?.position ?? null;
           const monthAgo = kwHistory[0]?.position ?? null;
+          const vol = volumes.find((v: any) => v.keyword_id === kw.id && v.city_id === city.id);
           rows.push({
             keyword: kw.keyword,
             today,
             monthAgo,
             history: kwHistory.map((h) => h.position),
             city: city.city_name,
+            searchVolume: (vol as any)?.search_volume ?? null,
           });
         }
       }
@@ -146,6 +153,7 @@ export default function Report() {
           <TableHeader>
             <TableRow>
               <TableHead>Keyword</TableHead>
+              <TableHead>Volume</TableHead>
               <TableHead>Position Today</TableHead>
               <TableHead>Last Month</TableHead>
               <TableHead>Change</TableHead>
@@ -158,6 +166,9 @@ export default function Report() {
               return (
                 <TableRow key={i}>
                   <TableCell className="font-medium">{row.keyword}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {row.searchVolume !== null ? row.searchVolume.toLocaleString() : "—"}
+                  </TableCell>
                   <TableCell><PositionBadge position={row.today} /></TableCell>
                   <TableCell><PositionBadge position={row.monthAgo} /></TableCell>
                   <TableCell>
@@ -168,7 +179,7 @@ export default function Report() {
               );
             })}
             {rows.length === 0 && (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No ranking data yet.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No ranking data yet.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
