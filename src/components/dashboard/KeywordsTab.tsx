@@ -263,6 +263,14 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
         clientId={client.id}
         onKeywordsAdded={() => queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] })}
       />
+
+      <SuggestKeywordsModal
+        open={suggestOpen}
+        onOpenChange={setSuggestOpen}
+        keywords={suggestedKeywords}
+        loading={suggesting}
+        onAdd={handleAddSuggested}
+      />
     </div>
   );
 }
