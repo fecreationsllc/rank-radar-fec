@@ -6,6 +6,7 @@ import { Tables } from "@/integrations/supabase/types";
 import { ClientSidebar } from "@/components/dashboard/ClientSidebar";
 import { ClientDashboard } from "@/components/dashboard/ClientDashboard";
 import { AddClientModal } from "@/components/dashboard/AddClientModal";
+import { Button } from "@/components/ui/button";
 import { Radar } from "lucide-react";
 
 export default function Index() {
