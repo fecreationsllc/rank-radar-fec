@@ -1,32 +1,23 @@
 
 
-# Add "Suggest More Keywords" feature to the Keywords tab
+# Add city search to Settings tab
 
 ## What it does
-Adds a button to the Keywords tab toolbar that uses AI to analyze the client's existing keywords, website content, and city — then suggests additional keywords that would complement the current list. Users can review and selectively add them.
+Adds a city search input to the Cities card in the Settings tab, reusing the same debounced `dataforseo-locations` edge function call pattern from `AddClientModal`. Users can search, select, and add new cities to an existing client.
 
 ## Changes
 
-### 1. New edge function: `suggest-more-keywords`
-File: `supabase/functions/suggest-more-keywords/index.ts`
+### `src/components/dashboard/SettingsTab.tsx`
 
-- Accepts `{ client_id }` 
-- Fetches the client's existing keywords, domain, name, and city from the database
-- Reuses the same website scraping logic from `suggest-keywords` (fetch homepage + subpages, strip HTML)
-- Sends to Lovable AI (`google/gemini-3-flash-preview`) with a prompt like: "Here are the keywords this business already tracks: [...]. Based on the website content and their current keyword strategy, suggest 15 additional keywords they should add. Focus on gaps — related services, long-tail variations, and local intent keywords they're missing."
-- Uses tool calling to return structured `{ keywords: string[] }`
-- Filters out any keywords already in the existing list
+1. **Add city search state** — `citySearch`, `cityResults`, `searching`, and a `searchTimeout` ref (same pattern as `AddClientModal`)
 
-### 2. Update `src/components/dashboard/KeywordsTab.tsx`
+2. **Add debounced search handler** — `handleCitySearch(query)` with 300ms debounce, calling the `dataforseo-locations` edge function
 
-- Add a "Suggest Keywords" button (with `Sparkles` icon) to the toolbar next to "Add Keywords" and "Sync Now"
-- On click, invoke `suggest-more-keywords` edge function
-- Show a modal/dialog with the suggested keywords as a checklist (all checked by default)
-- User can uncheck any they don't want, then click "Add Selected" to insert them into the `keywords` table
-- Show loading state while AI generates suggestions
+3. **Add city to client** — `handleAddCity(location)` inserts into `client_cities` table with the client's ID, then refetches cities and clears search
 
-### Technical details
-- The edge function uses `LOVABLE_API_KEY` (already available) and the Lovable AI gateway
-- Suggested keywords are deduplicated against existing keywords server-side
-- The add flow reuses the same insert logic as `AddKeywordsModal`
+4. **UI in the Cities card** — Add a search input with `Search` icon below the existing city list. Show a dropdown of results (with `Loader2` spinner while searching, "No cities found" when empty). Clicking a result adds it. Filter out cities already added.
+
+5. **New imports** — `useRef` from React, `Search`, `Loader2` from lucide-react
+
+No backend or edge function changes needed — reuses the existing `dataforseo-locations` function.
 
