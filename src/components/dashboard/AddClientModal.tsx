@@ -41,6 +41,7 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
   const [suggestingKeywords, setSuggestingKeywords] = useState(false);
 
   const { toast } = useToast();
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   const reset = () => {
     setStep(1);
