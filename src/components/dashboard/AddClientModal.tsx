@@ -64,16 +64,18 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
     setStep(2);
   };
 
-  const handleCitySearch = async (query: string) => {
+  const handleCitySearch = (query: string) => {
     setCitySearch(query);
-    if (query.length < 3) { setCityResults([]); return; }
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    if (query.length < 3) { setCityResults([]); setSearching(false); return; }
     setSearching(true);
-    try {
-      // Use edge function to proxy DataForSEO call
-      const { data } = await supabase.functions.invoke("dataforseo-locations", { body: { query } });
-      setCityResults(data?.locations ?? []);
-    } catch { setCityResults([]); }
-    setSearching(false);
+    searchTimeout.current = setTimeout(async () => {
+      try {
+        const { data } = await supabase.functions.invoke("dataforseo-locations", { body: { query } });
+        setCityResults(data?.locations ?? []);
+      } catch { setCityResults([]); }
+      setSearching(false);
+    }, 300);
   };
 
   const handleSelectCity = (loc: LocationResult) => {
