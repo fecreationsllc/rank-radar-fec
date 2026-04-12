@@ -30,7 +30,7 @@ export function ClientSidebar({ clients, selectedId, onSelect, onAddClient }: Cl
         </button>
       ))}
       <div className="px-4 pt-3">
-        <Button variant="outline" size="sm" className="w-full justify-start border-sidebar-border text-sidebar-foreground hover:bg-sidebar-accent" onClick={onAddClient}>
+        <Button variant="outline" size="sm" className="w-full justify-start border-sidebar-border bg-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground" onClick={onAddClient}>
           <Plus className="h-4 w-4 mr-1" /> Add Client
         </Button>
       </div>

@@ -28,7 +28,7 @@ export default function Index() {
   return (
     <div className="flex min-h-screen">
       {/* Sidebar */}
-      <aside className="w-[220px] flex-shrink-0 bg-sidebar-background text-sidebar-foreground flex flex-col">
+      <aside className="w-[220px] flex-shrink-0 bg-sidebar text-sidebar-foreground flex flex-col">
         <div className="flex items-center gap-2 px-4 py-5 border-b border-sidebar-border">
           <Radar className="h-5 w-5" />
           <span className="font-bold text-base">RankRadar</span>
