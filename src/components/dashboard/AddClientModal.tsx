@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
   const [suggestingKeywords, setSuggestingKeywords] = useState(false);
 
   const { toast } = useToast();
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   const reset = () => {
     setStep(1);
@@ -63,16 +64,18 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
     setStep(2);
   };
 
-  const handleCitySearch = async (query: string) => {
+  const handleCitySearch = (query: string) => {
     setCitySearch(query);
-    if (query.length < 3) { setCityResults([]); return; }
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    if (query.length < 3) { setCityResults([]); setSearching(false); return; }
     setSearching(true);
-    try {
-      // Use edge function to proxy DataForSEO call
-      const { data } = await supabase.functions.invoke("dataforseo-locations", { body: { query } });
-      setCityResults(data?.locations ?? []);
-    } catch { setCityResults([]); }
-    setSearching(false);
+    searchTimeout.current = setTimeout(async () => {
+      try {
+        const { data } = await supabase.functions.invoke("dataforseo-locations", { body: { query } });
+        setCityResults(data?.locations ?? []);
+      } catch { setCityResults([]); }
+      setSearching(false);
+    }, 300);
   };
 
   const handleSelectCity = (loc: LocationResult) => {
@@ -177,7 +180,13 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input value={citySearch} onChange={(e) => handleCitySearch(e.target.value)} placeholder="Search cities..." className="pl-9" />
             </div>
-            {cityResults.length > 0 && (
+            {searching && (
+              <div className="border rounded-lg px-3 py-2 flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Searching...
+              </div>
+            )}
+            {!searching && cityResults.length > 0 && (
               <div className="border rounded-lg max-h-40 overflow-auto">
                 {cityResults.map((loc) => (
                   <button key={loc.location_code} className="w-full text-left px-3 py-2 text-sm hover:bg-muted" onClick={() => handleSelectCity(loc)}>
@@ -185,6 +194,9 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
                   </button>
                 ))}
               </div>
+            )}
+            {!searching && cityResults.length === 0 && citySearch.length >= 3 && (
+              <p className="text-sm text-muted-foreground">No cities found</p>
             )}
             {selectedCities.length > 0 && (
               <div className="flex flex-wrap gap-2">
