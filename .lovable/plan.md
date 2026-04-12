@@ -1,17 +1,18 @@
 
 
-# Fix: Add "Add Client" button to the empty state
+# Fix: Make sidebar "Add Client" button always visible
 
 ## Problem
-You're logged in and see the "No clients yet" screen, but there's no obvious button to add your first client. The sidebar is rendering on the left with the "+ Add Client" button, but it may be hard to notice. More importantly, the empty state in the main content area should have a clear call-to-action button.
+The "Add Client" button in the sidebar uses `variant="ghost"`, making it nearly invisible against the dark sidebar background until hovered.
 
 ## Solution
-Add an "Add your first client" button directly in the empty state message (the center of the screen), so you can click it right away without needing to find the sidebar button.
+**File: `src/components/dashboard/ClientSidebar.tsx` (line 33)**
+- Change the button from `variant="ghost"` to `variant="outline"` and add explicit border/text colors so it's always visible on the dark sidebar:
+  ```tsx
+  <Button variant="outline" size="sm" 
+    className="w-full justify-start border-sidebar-border text-sidebar-foreground hover:bg-sidebar-accent" 
+    onClick={onAddClient}>
+  ```
 
-## Changes
-**File: `src/pages/Index.tsx`**
-- Add a "Add Client" button below the "Add your first client to start tracking rankings" text in the empty state
-- The button will open the same AddClientModal
-
-This is a small, single-file change.
+This gives the button a visible border and text at all times.
 
