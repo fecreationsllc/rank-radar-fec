@@ -1,20 +1,32 @@
 
 
-# Fix city search autocomplete with debouncing
+# Add "Suggest More Keywords" feature to the Keywords tab
 
-## Problem
-The city search calls the edge function on every keystroke after 3 characters. Without debouncing, rapid typing fires multiple concurrent requests that can race and overwrite each other, making suggestions appear unreliable or missing.
+## What it does
+Adds a button to the Keywords tab toolbar that uses AI to analyze the client's existing keywords, website content, and city — then suggests additional keywords that would complement the current list. Users can review and selectively add them.
 
-## Solution
-Add a debounce (300ms) to the city search input so the API call only fires after the user pauses typing. Also show a loading indicator while searching.
+## Changes
 
-### Changes to `src/components/dashboard/AddClientModal.tsx`
+### 1. New edge function: `suggest-more-keywords`
+File: `supabase/functions/suggest-more-keywords/index.ts`
 
-1. **Add debounced search** — use a `useRef` timer to debounce `handleCitySearch` by 300ms. Each keystroke resets the timer; the API call only fires once typing pauses.
+- Accepts `{ client_id }` 
+- Fetches the client's existing keywords, domain, name, and city from the database
+- Reuses the same website scraping logic from `suggest-keywords` (fetch homepage + subpages, strip HTML)
+- Sends to Lovable AI (`google/gemini-3-flash-preview`) with a prompt like: "Here are the keywords this business already tracks: [...]. Based on the website content and their current keyword strategy, suggest 15 additional keywords they should add. Focus on gaps — related services, long-tail variations, and local intent keywords they're missing."
+- Uses tool calling to return structured `{ keywords: string[] }`
+- Filters out any keywords already in the existing list
 
-2. **Show loading state** — display a `Loader2` spinner inside the dropdown while `searching` is true, so the user knows results are loading.
+### 2. Update `src/components/dashboard/KeywordsTab.tsx`
 
-3. **Show "No results" message** — when the search completes with 0 results and query length ≥ 3, show "No cities found" so the user knows the search worked.
+- Add a "Suggest Keywords" button (with `Sparkles` icon) to the toolbar next to "Add Keywords" and "Sync Now"
+- On click, invoke `suggest-more-keywords` edge function
+- Show a modal/dialog with the suggested keywords as a checklist (all checked by default)
+- User can uncheck any they don't want, then click "Add Selected" to insert them into the `keywords` table
+- Show loading state while AI generates suggestions
 
-No edge function changes needed — the API is working correctly.
+### Technical details
+- The edge function uses `LOVABLE_API_KEY` (already available) and the Lovable AI gateway
+- Suggested keywords are deduplicated against existing keywords server-side
+- The add flow reuses the same insert logic as `AddKeywordsModal`
 
