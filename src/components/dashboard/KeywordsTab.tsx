@@ -12,7 +12,8 @@ import { getRankChange } from "@/lib/rank-utils";
 import { AddKeywordsModal } from "@/components/dashboard/AddKeywordsModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, RefreshCw, Search, TrendingUp, TrendingDown, Target, Hash, X } from "lucide-react";
+import { Plus, RefreshCw, Search, TrendingUp, TrendingDown, Target, Hash, X, Sparkles } from "lucide-react";
+import { SuggestKeywordsModal } from "@/components/dashboard/SuggestKeywordsModal";
 import { Badge } from "@/components/ui/badge";
 import { subDays } from "date-fns";
 
