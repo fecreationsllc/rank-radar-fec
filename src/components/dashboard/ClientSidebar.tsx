@@ -44,7 +44,7 @@ export function ClientSidebar({ clients, selectedId, onSelect, onAddClient, onDe
               tabIndex={0}
               onClick={(e) => { e.stopPropagation(); setDeleteTarget(client); }}
               onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setDeleteTarget(client); } }}
-              className="opacity-0 group-hover:opacity-100 transition-opacity text-sidebar-foreground/40 hover:text-red-400 flex-shrink-0"
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-sidebar-foreground/40 hover:text-destructive flex-shrink-0"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </span>
