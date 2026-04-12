@@ -55,6 +55,7 @@ export default function Index() {
               <Radar className="h-12 w-12 mx-auto text-muted-foreground/50" />
               <p className="text-lg font-medium">No clients yet</p>
               <p className="text-sm">Add your first client to start tracking rankings.</p>
+              <Button onClick={() => setAddClientOpen(true)} className="mt-4">+ Add Client</Button>
             </div>
           </div>
         )}
