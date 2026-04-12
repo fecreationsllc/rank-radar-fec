@@ -180,7 +180,13 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input value={citySearch} onChange={(e) => handleCitySearch(e.target.value)} placeholder="Search cities..." className="pl-9" />
             </div>
-            {cityResults.length > 0 && (
+            {searching && (
+              <div className="border rounded-lg px-3 py-2 flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Searching...
+              </div>
+            )}
+            {!searching && cityResults.length > 0 && (
               <div className="border rounded-lg max-h-40 overflow-auto">
                 {cityResults.map((loc) => (
                   <button key={loc.location_code} className="w-full text-left px-3 py-2 text-sm hover:bg-muted" onClick={() => handleSelectCity(loc)}>
@@ -188,6 +194,9 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
                   </button>
                 ))}
               </div>
+            )}
+            {!searching && cityResults.length === 0 && citySearch.length >= 3 && (
+              <p className="text-sm text-muted-foreground">No cities found</p>
             )}
             {selectedCities.length > 0 && (
               <div className="flex flex-wrap gap-2">
