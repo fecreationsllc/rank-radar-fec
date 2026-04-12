@@ -14,7 +14,203 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      client_cities: {
+        Row: {
+          city_name: string
+          client_id: string
+          created_at: string
+          id: string
+          is_primary: boolean | null
+          location_code: number
+        }
+        Insert: {
+          city_name: string
+          client_id: string
+          created_at?: string
+          id?: string
+          is_primary?: boolean | null
+          location_code: number
+        }
+        Update: {
+          city_name?: string
+          client_id?: string
+          created_at?: string
+          id?: string
+          is_primary?: boolean | null
+          location_code?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_cities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          alert_email: string | null
+          created_at: string
+          domain: string
+          id: string
+          name: string
+          report_token: string | null
+        }
+        Insert: {
+          alert_email?: string | null
+          created_at?: string
+          domain: string
+          id?: string
+          name: string
+          report_token?: string | null
+        }
+        Update: {
+          alert_email?: string | null
+          created_at?: string
+          domain?: string
+          id?: string
+          name?: string
+          report_token?: string | null
+        }
+        Relationships: []
+      }
+      competitors: {
+        Row: {
+          client_id: string
+          created_at: string
+          domain: string
+          id: string
+          is_auto_discovered: boolean | null
+          is_tracked: boolean | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          domain: string
+          id?: string
+          is_auto_discovered?: boolean | null
+          is_tracked?: boolean | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          domain?: string
+          id?: string
+          is_auto_discovered?: boolean | null
+          is_tracked?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "competitors_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      keywords: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          keyword: string
+          target_url: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          keyword: string
+          target_url?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          keyword?: string
+          target_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "keywords_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rank_history: {
+        Row: {
+          checked_at: string
+          city_id: string
+          id: string
+          keyword_id: string
+          position: number | null
+        }
+        Insert: {
+          checked_at?: string
+          city_id: string
+          id?: string
+          keyword_id: string
+          position?: number | null
+        }
+        Update: {
+          checked_at?: string
+          city_id?: string
+          id?: string
+          keyword_id?: string
+          position?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rank_history_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "client_cities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rank_history_keyword_id_fkey"
+            columns: ["keyword_id"]
+            isOneToOne: false
+            referencedRelation: "keywords"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seo_suggestions: {
+        Row: {
+          client_id: string
+          generated_at: string
+          id: string
+          suggestions: Json
+        }
+        Insert: {
+          client_id: string
+          generated_at?: string
+          id?: string
+          suggestions: Json
+        }
+        Update: {
+          client_id?: string
+          generated_at?: string
+          id?: string
+          suggestions?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seo_suggestions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
