@@ -38,6 +38,7 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
   // Keywords
   const [keywordsText, setKeywordsText] = useState("");
   const [parsedKeywords, setParsedKeywords] = useState<string[]>([]);
+  const [suggestingKeywords, setSuggestingKeywords] = useState(false);
 
   const { toast } = useToast();
 
@@ -92,6 +93,27 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
     }));
     await supabase.from("client_cities").insert(cityInserts);
     setStep(3);
+    fetchSuggestedKeywords();
+  };
+
+  const fetchSuggestedKeywords = async () => {
+    setSuggestingKeywords(true);
+    try {
+      const primaryCity = selectedCities[0]?.location_name ?? "";
+      const { data, error } = await supabase.functions.invoke("suggest-keywords", {
+        body: { domain, client_name: name, city_name: primaryCity },
+      });
+      if (error) throw error;
+      if (data?.keywords?.length) {
+        const text = data.keywords.join("\n");
+        setKeywordsText(text);
+        handleParseKeywords(text);
+      }
+    } catch (e) {
+      console.error("Keyword suggestion failed:", e);
+      toast({ title: "Could not auto-suggest keywords", description: "You can still add them manually.", variant: "destructive" });
+    }
+    setSuggestingKeywords(false);
   };
 
   const handleParseKeywords = (text: string) => {
@@ -182,9 +204,21 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
 
         {step === 3 && (
           <div className="space-y-4">
+            {suggestingKeywords && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Analyzing website and suggesting keywords...
+              </div>
+            )}
             <div className="space-y-2">
-              <Label>Keywords</Label>
-              <Textarea value={keywordsText} onChange={(e) => handleParseKeywords(e.target.value)} placeholder="Paste keywords, one per line or comma-separated" rows={5} />
+              <div className="flex items-center justify-between">
+                <Label>Keywords</Label>
+                <Button variant="ghost" size="sm" onClick={fetchSuggestedKeywords} disabled={suggestingKeywords} className="h-7 text-xs gap-1">
+                  <RefreshCw className="h-3 w-3" />
+                  Regenerate
+                </Button>
+              </div>
+              <Textarea value={keywordsText} onChange={(e) => handleParseKeywords(e.target.value)} placeholder="Paste keywords, one per line or comma-separated" rows={8} disabled={suggestingKeywords} />
             </div>
             {parsedKeywords.length > 0 && (
               <div className="text-sm text-muted-foreground">
@@ -195,7 +229,7 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
                 </div>
               </div>
             )}
-            <Button onClick={handleStep3} className="w-full" disabled={parsedKeywords.length === 0}>Save Keywords</Button>
+            <Button onClick={handleStep3} className="w-full" disabled={parsedKeywords.length === 0 || suggestingKeywords}>Save Keywords</Button>
           </div>
         )}
 
