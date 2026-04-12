@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -8,12 +8,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Copy, Trash2, X } from "lucide-react";
+import { Copy, Loader2, Search, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface SettingsTabProps {
   client: Tables<"clients">;
   refetchClients: () => void;
+}
+
+interface LocationResult {
+  location_name: string;
+  location_code: number;
 }
 
 export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
@@ -23,6 +28,12 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  // City search state
+  const [citySearch, setCitySearch] = useState("");
+  const [cityResults, setCityResults] = useState<LocationResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   const { data: cities = [], refetch: refetchCities } = useQuery({
     queryKey: ["cities", client.id],
@@ -47,6 +58,36 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
   const handleRemoveCity = async (cityId: string) => {
     await supabase.from("client_cities").delete().eq("id", cityId);
     refetchCities();
+  };
+
+  const handleCitySearch = (query: string) => {
+    setCitySearch(query);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    if (query.length < 3) { setCityResults([]); setSearching(false); return; }
+    setSearching(true);
+    searchTimeout.current = setTimeout(async () => {
+      try {
+        const { data } = await supabase.functions.invoke("dataforseo-locations", { body: { query } });
+        const results: LocationResult[] = data?.locations ?? [];
+        // Filter out already-added cities
+        const existingCodes = new Set(cities.map((c) => c.location_code));
+        setCityResults(results.filter((r) => !existingCodes.has(r.location_code)));
+      } catch { setCityResults([]); }
+      setSearching(false);
+    }, 300);
+  };
+
+  const handleAddCity = async (loc: LocationResult) => {
+    await supabase.from("client_cities").insert({
+      client_id: client.id,
+      city_name: loc.location_name,
+      location_code: loc.location_code,
+      is_primary: cities.length === 0,
+    });
+    setCitySearch("");
+    setCityResults([]);
+    refetchCities();
+    toast({ title: `Added ${loc.location_name}` });
   };
 
   const reportUrl = `${window.location.origin}/report/${client.report_token}`;
@@ -87,6 +128,32 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
             </div>
           ))}
           {cities.length === 0 && <p className="text-sm text-muted-foreground">No cities configured.</p>}
+
+          <div className="pt-2 space-y-2">
+            <Label className="text-sm">Add a city</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input value={citySearch} onChange={(e) => handleCitySearch(e.target.value)} placeholder="Search cities..." className="pl-9" />
+            </div>
+            {searching && (
+              <div className="border rounded-lg px-3 py-2 flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Searching...
+              </div>
+            )}
+            {!searching && cityResults.length > 0 && (
+              <div className="border rounded-lg max-h-40 overflow-auto">
+                {cityResults.map((loc) => (
+                  <button key={loc.location_code} className="w-full text-left px-3 py-2 text-sm hover:bg-muted" onClick={() => handleAddCity(loc)}>
+                    {loc.location_name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!searching && cityResults.length === 0 && citySearch.length >= 3 && (
+              <p className="text-sm text-muted-foreground">No cities found</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
