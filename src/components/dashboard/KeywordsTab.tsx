@@ -34,6 +34,9 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestedKeywords, setSuggestedKeywords] = useState<string[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -127,6 +130,31 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
   const handleRemoveKeyword = async (keywordId: string) => {
     await supabase.from("keywords").delete().eq("id", keywordId);
     queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
+  };
+
+  const handleSuggest = async () => {
+    setSuggestOpen(true);
+    setSuggesting(true);
+    setSuggestedKeywords([]);
+    try {
+      const { data, error } = await supabase.functions.invoke("suggest-more-keywords", {
+        body: { client_id: client.id },
+      });
+      if (error) throw error;
+      setSuggestedKeywords(data?.keywords ?? []);
+    } catch (e) {
+      toast({ title: "Failed to get suggestions", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
+    }
+    setSuggesting(false);
+  };
+
+  const handleAddSuggested = async (keywords: string[]) => {
+    if (!keywords.length) return;
+    const rows = keywords.map(kw => ({ client_id: client.id, keyword: kw }));
+    await supabase.from("keywords").insert(rows);
+    queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
+    setSuggestOpen(false);
+    toast({ title: `Added ${keywords.length} keyword${keywords.length > 1 ? "s" : ""}` });
   };
 
   const multiCity = cities.length > 1;
