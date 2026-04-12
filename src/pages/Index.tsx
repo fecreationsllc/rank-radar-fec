@@ -8,6 +8,7 @@ import { ClientDashboard } from "@/components/dashboard/ClientDashboard";
 import { AddClientModal } from "@/components/dashboard/AddClientModal";
 import { Button } from "@/components/ui/button";
 import { Radar } from "lucide-react";
+import { toast } from "sonner";
 
 export default function Index() {
   const { signOut } = useAuth();
@@ -38,6 +39,24 @@ export default function Index() {
           selectedId={selectedClient?.id ?? null}
           onSelect={setSelectedClientId}
           onAddClient={() => setAddClientOpen(true)}
+          onDeleteClient={async (clientId) => {
+            try {
+              // Get keyword ids for cascade
+              const { data: kws } = await supabase.from("keywords").select("id").eq("client_id", clientId);
+              const kwIds = (kws ?? []).map((k) => k.id);
+              if (kwIds.length) await supabase.from("rank_history").delete().in("keyword_id", kwIds);
+              await supabase.from("keywords").delete().eq("client_id", clientId);
+              await supabase.from("client_cities").delete().eq("client_id", clientId);
+              await supabase.from("competitors").delete().eq("client_id", clientId);
+              await supabase.from("seo_suggestions").delete().eq("client_id", clientId);
+              await supabase.from("clients").delete().eq("id", clientId);
+              if (selectedClientId === clientId) setSelectedClientId(null);
+              refetchClients();
+              toast.success("Client deleted");
+            } catch (e) {
+              toast.error("Failed to delete client");
+            }
+          }}
         />
         <div className="mt-auto p-4 border-t border-sidebar-border">
           <button onClick={signOut} className="text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors">
