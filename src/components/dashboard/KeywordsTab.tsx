@@ -247,7 +247,25 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
             queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
           }
         }
-      }, 15000);
+      }, 10000);
+      // Start first poll sooner
+      setTimeout(async () => {
+        try {
+          const { data: pollData } = await supabase.functions.invoke("fetch-ranking-results", {
+            body: { client_id: client.id },
+          });
+          const completed = pollData?.completed ?? 0;
+          setSyncCompleted(completed);
+          if (pollData?.status === "complete" || pollData?.status === "no_pending") {
+            clearInterval(pollInterval);
+            setSyncing(false);
+            setSyncTotal(0);
+            setSyncCompleted(0);
+            queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
+            toast({ title: "Rankings updated", description: `${pollData?.total_ranks ?? 0} results processed.` });
+          }
+        } catch {}
+      }, 5000);
     } catch {
       toast({ title: "Sync failed", variant: "destructive" });
       setSyncing(false);
@@ -332,14 +350,23 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
       </div>
 
       {/* Sync progress */}
-      {syncing && syncTotal > 0 && (
+      {syncing && (
         <Card className="rounded-xl">
           <CardContent className="p-4 space-y-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <RefreshCw className="h-4 w-4 animate-spin" />
-              <span>Syncing rankings... {syncCompleted} of {syncTotal} completed</span>
+              <span>
+                {syncTotal > 0 && syncCompleted > 0
+                  ? `Syncing rankings... ${syncCompleted} of ${syncTotal} completed`
+                  : syncTotal > 0
+                  ? `Waiting for results... (${syncTotal} tasks queued)`
+                  : "Starting sync..."}
+              </span>
             </div>
-            <Progress value={syncTotal > 0 ? (syncCompleted / syncTotal) * 100 : 0} className="h-2" />
+            <Progress
+              value={syncTotal > 0 && syncCompleted > 0 ? (syncCompleted / syncTotal) * 100 : undefined}
+              className={`h-2 ${syncTotal > 0 && syncCompleted === 0 ? "animate-pulse" : ""}`}
+            />
           </CardContent>
         </Card>
       )}
@@ -400,7 +427,15 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
                     <TableCell className="text-sm text-muted-foreground">
                       {row.searchVolume !== null ? row.searchVolume.toLocaleString() : "—"}
                     </TableCell>
-                    <TableCell><PositionBadge position={row.today} /></TableCell>
+                    <TableCell>
+                      {row.today !== null ? (
+                        <PositionBadge position={row.today} />
+                      ) : row.history.length > 0 ? (
+                        <span className="text-xs text-muted-foreground">100+</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {weekChange && <span className={`text-sm font-medium ${weekChange.color}`}>{weekChange.text}</span>}
                     </TableCell>
