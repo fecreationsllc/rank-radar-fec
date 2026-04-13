@@ -1,0 +1,1 @@
+ALTER TABLE public.keywords ADD COLUMN status text NOT NULL DEFAULT 'monitoring';
