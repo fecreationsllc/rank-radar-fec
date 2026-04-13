@@ -304,6 +304,11 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
     queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
   };
 
+  const handleStatusChange = async (keywordId: string, newStatus: string) => {
+    await supabase.from("keywords").update({ status: newStatus } as any).eq("id", keywordId);
+    queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
+  };
+
   const handleSuggest = async () => {
     setSuggestOpen(true);
     setSuggesting(true);
