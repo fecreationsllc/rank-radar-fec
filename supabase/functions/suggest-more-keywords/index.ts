@@ -9,7 +9,7 @@ const corsHeaders = {
 async function fetchPageHtml(url: string): Promise<string | null> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const timeout = setTimeout(() => controller.abort(), 3000);
     const res = await fetch(url, {
       signal: controller.signal,
       headers: { "User-Agent": "Mozilla/5.0 (compatible; RankRadarBot/1.0)" },
@@ -62,7 +62,7 @@ function prioritizeLinks(links: string[], homepageUrl: string): string[] {
     const bScore = priority.findIndex(p => b.toLowerCase().includes(p));
     return (aScore === -1 ? 999 : aScore) - (bScore === -1 ? 999 : bScore);
   });
-  return dominated.slice(0, 5);
+  return dominated.slice(0, 2);
 }
 
 serve(async (req) => {
@@ -115,18 +115,18 @@ serve(async (req) => {
     const homepageHtml = await fetchPageHtml(homepageUrl);
 
     if (homepageHtml) {
-      websiteContent += `[Homepage]: ${stripHtml(homepageHtml).slice(0, 2000)}\n\n`;
+      websiteContent += `[Homepage]: ${stripHtml(homepageHtml).slice(0, 1000)}\n\n`;
       const links = extractLinks(homepageHtml, cleanDomain);
       const subpages = prioritizeLinks(links, homepageUrl);
       const subResults = await Promise.all(
         subpages.map(async (url) => {
           const html = await fetchPageHtml(url);
           if (!html) return null;
-          return `[${new URL(url).pathname}]: ${stripHtml(html).slice(0, 2000)}`;
+          return `[${new URL(url).pathname}]: ${stripHtml(html).slice(0, 1000)}`;
         })
       );
       for (const r of subResults) if (r) websiteContent += r + "\n\n";
-      if (websiteContent.length > 10000) websiteContent = websiteContent.slice(0, 10000);
+      if (websiteContent.length > 5000) websiteContent = websiteContent.slice(0, 5000);
     }
 
     const hasContent = websiteContent.length > 100;
