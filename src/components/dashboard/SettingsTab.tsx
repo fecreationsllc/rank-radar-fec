@@ -279,6 +279,23 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
         </CardContent>
       </Card>
 
+      <Card className="rounded-xl">
+        <CardHeader><CardTitle>Rank Drop Alerts</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            When a keyword drops 10+ positions, an alert email is sent to <strong>{client.alert_email || "—"}</strong>.
+          </p>
+          <Button
+            variant="outline"
+            onClick={handleSendTestAlert}
+            disabled={sendingTestAlert || !client.alert_email}
+          >
+            {sendingTestAlert ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Mail className="h-4 w-4 mr-1" />}
+            Send Test Alert
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card className="rounded-xl border-destructive/30">
         <CardHeader><CardTitle className="text-destructive">Danger Zone</CardTitle></CardHeader>
         <CardContent>
