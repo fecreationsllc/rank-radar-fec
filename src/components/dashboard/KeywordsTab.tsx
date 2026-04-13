@@ -265,7 +265,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
             toast({ title: "Rankings updated", description: `${pollData?.total_ranks ?? 0} results processed.` });
           }
         } catch {}
-      }, 5000);
+      }, 20000);
     } catch {
       toast({ title: "Sync failed", variant: "destructive" });
       setSyncing(false);

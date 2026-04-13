@@ -59,17 +59,27 @@ serve(async (req) => {
 
         // Check if task is ready
         const taskResult = resultData.tasks?.[0];
+        console.log(`Task ${task.dataforseo_task_id} — status_code: ${taskResult?.status_code}, items_length: ${taskResult?.result?.[0]?.items?.length ?? 0}`);
+        
         if (!taskResult || taskResult.status_code === 40601) {
-          // Task not ready yet, skip
+          console.log(`Task ${task.dataforseo_task_id} — not ready (status 40601), skipping`);
           continue;
         }
 
         const items = taskResult.result?.[0]?.items ?? [];
         const organicItems = items.filter((item: any) => item.type === "organic");
 
+        // If no organic items and task is less than 5 minutes old, treat as "not ready"
+        const taskAge = Date.now() - new Date(task.created_at).getTime();
+        const FIVE_MINUTES = 5 * 60 * 1000;
+        if (organicItems.length === 0 && taskAge < FIVE_MINUTES) {
+          console.log(`Task ${task.dataforseo_task_id} — 0 organic items but task is only ${Math.round(taskAge / 1000)}s old, skipping (not ready)`);
+          continue;
+        }
+
         // Log first 5 organic domains for debugging
         const sampleDomains = organicItems.slice(0, 5).map((it: any) => it.domain);
-        console.log(`Task ${task.dataforseo_task_id} — clientDomain: "${clientDomain}", top5 organic domains:`, sampleDomains);
+        console.log(`Task ${task.dataforseo_task_id} — clientDomain: "${clientDomain}", top5 organic domains:`, sampleDomains, `(${organicItems.length} total organic)`);
 
         // Normalize domain for comparison: strip www. and trailing dots
         const normalizeDomain = (d: string) => d?.toLowerCase().replace(/^www\./, "").replace(/\.$/, "") ?? "";
