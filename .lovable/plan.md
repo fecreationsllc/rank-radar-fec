@@ -1,34 +1,24 @@
 
 
-# Fix ranking results display and progress bar
+# Fix: SearchConsoleTab white screen (Rules of Hooks violation)
 
-## Problem 1: Positions always null
-The domain matching logic (`item.domain.includes(clientDomain)`) may miss matches where DataForSEO returns a subdomain like `www.studio250.net` or a different format. Also, the UI shows nothing useful when position is null — no indication that the keyword was checked but not found in top 100.
+## Root cause
+The `useMemo` hook for `sortedData` (line ~192) runs **after** an early return on line 73. When GSC is not connected, the component returns early, skipping the `useMemo` call. React detects a different number of hooks between renders and crashes.
 
-**Fix in `supabase/functions/fetch-ranking-results/index.ts`:**
-- Normalize domain comparison: strip "www." from both `item.domain` and `clientDomain`, and also try matching the other way (`clientDomain.includes(item.domain)`)
-- Add console logging of the first few organic domains found per task so we can debug what DataForSEO actually returns
+## Fix
 
-**Fix in `src/components/dashboard/KeywordsTab.tsx`:**
-- When position is null but rank_history records exist, show "100+" or "Not in top 100" instead of a blank dash — this tells the user the sync ran but the site isn't ranking
+**File**: `src/components/dashboard/SearchConsoleTab.tsx`
 
-## Problem 2: Progress bar jumps from 0% to done
-The first poll at 15s finds everything already complete, so you never see incremental progress.
+Move the `useMemo` for `sortedData` **above** the early return (alongside the other hooks at the top of the component). The aggregation logic that `sortedData` depends on also needs to move above the early return — wrap it in a `useMemo` as well so it doesn't recompute on every render.
 
-**Fix in `src/components/dashboard/KeywordsTab.tsx`:**
-- Reduce initial poll delay to 5 seconds (DataForSEO tasks typically take 10-30 seconds)
-- Reduce poll interval to 10 seconds  
-- Make the progress bar show a pulsing/indeterminate state while waiting for first poll results (show "Waiting for results..." with an animated progress bar)
-- Accumulate `syncCompleted` properly across polls (add to previous value, don't replace)
+Specifically:
+1. Move the aggregation logic (lines 85-115) into a `useMemo` that depends on `gscData` and `trackedKeywords`, placed before the early return
+2. Move the `sortedData` `useMemo` (line ~192) above the early return
+3. Move the `handleSort` function and `SortIcon` component above the early return
+4. The early return stays — it just comes after all hooks
 
-## Problem 3: Duplicate rank_history entries
-Each sync creates 14 new rank_history rows. You've synced ~5 times, creating 70 rows — all null. The sync doesn't check if a sync was already done recently.
-
-**Fix in `supabase/functions/sync-rankings/index.ts`:**
-- Before posting tasks, check if there are already pending ranking_tasks for this client. If so, skip re-posting and return a message.
+This ensures all hooks are called on every render regardless of connection status.
 
 ## Files changed
-1. `supabase/functions/fetch-ranking-results/index.ts` — better domain matching + debug logging
-2. `src/components/dashboard/KeywordsTab.tsx` — show "100+" for null positions, fix progress bar timing, indeterminate state
-3. `supabase/functions/sync-rankings/index.ts` — prevent duplicate syncs
+1. `src/components/dashboard/SearchConsoleTab.tsx` — reorder hooks above early return
 
