@@ -1,56 +1,64 @@
 
 
-# Add API Cost Tracker
+# Integrate Google Search Console (GSC) Data
 
-## Two issues to address
+## Overview
+Connect your single Google account to pull GSC data (top queries, clicks, impressions, CTR, avg position) per client domain. This data appears in a new "Search Console" tab and enriches keyword suggestions.
 
-### 1. Stats showing correctly
-The sync worked — the site just doesn't rank in the top 100 for those keywords, hence null positions. The stat cards (Avg Position, Top 10, etc.) correctly show 0/—. No code fix needed here. Search volumes showing "—" may be because DataForSEO returned no volume data for those keywords in that location — I can investigate further if needed.
+## How it works
 
-### 2. Cost Calculator tab
+Since there's no built-in GSC connector, we need Google OAuth with the `webmasters.readonly` scope. You'll create a Google OAuth app once, and the tool stores the refresh token to keep pulling data.
 
-Track all operational costs: DataForSEO (rankings + search volume), AI (keyword suggestions, SEO suggestions), and email alerts.
+## Changes
 
-#### New database table: `api_usage_log`
-```sql
-CREATE TABLE api_usage_log (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  client_id uuid,
-  function_name text NOT NULL,
-  api_provider text NOT NULL,        -- 'dataforseo', 'lovable_ai', 'resend'
-  endpoint text,
-  task_count integer DEFAULT 1,
-  cost_usd numeric(10,6) NOT NULL,
-  created_at timestamptz DEFAULT now()
-);
-```
+### 1. Google OAuth setup (one-time, per agency)
+- Store `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` as secrets
+- New edge function `gsc-auth` handles the OAuth flow (authorization URL + token exchange)
+- Store the refresh token in a new `gsc_connections` table
+- A small "Connect Google" button in Settings initiates the flow
 
-#### Cost rates (hardcoded in edge functions)
-| API Call | Cost per unit |
-|----------|--------------|
-| DataForSEO SERP task_post | $0.002 per task (1 task = 1 keyword×city) |
-| DataForSEO search_volume | $0.05 per request (up to 700 keywords) |
-| Lovable AI (gemini-3-flash) | ~$0.001 per call (estimate) |
-| Resend email | $0.00 (free tier) |
+### 2. New database tables
 
-#### Edge function updates
-Add cost logging to each function after successful API calls:
-- `sync-rankings` — log DataForSEO SERP costs (task count × $0.002)
-- `fetch-search-volume` — log DataForSEO volume costs (request count × $0.05)
-- `suggest-more-keywords` — log AI cost
-- `suggest-keywords` — log AI cost
-- `generate-suggestions` — log AI cost
-- `discover-competitors` — log DataForSEO cost
+**`gsc_connections`** — stores OAuth credentials per agency (single row since single account)
+- `id`, `access_token`, `refresh_token`, `token_expires_at`, `created_at`
 
-#### New "Costs" tab in ClientDashboard
-- Add a "Costs" tab next to Settings in the nav
-- Show: total spend (all time), spend this month, spend by API provider (pie/bar chart)
-- Table of recent API calls with date, function, provider, task count, cost
-- Global summary across all clients at the top
+**`gsc_query_data`** — cached GSC query performance data per client
+- `id`, `client_id`, `query`, `clicks`, `impressions`, `ctr`, `position`, `date`, `fetched_at`
 
-### Files to change
-1. **Migration** — create `api_usage_log` table with RLS
-2. **All 6 edge functions** — add cost logging after API calls
-3. **New component** `src/components/dashboard/CostsTab.tsx` — cost display UI
-4. **`ClientDashboard.tsx`** — add Costs tab to nav
+### 3. New edge function: `fetch-gsc-data`
+- Accepts `{ client_id }`
+- Reads the client's domain, refreshes the OAuth token if needed
+- Calls GSC Search Analytics API (`searchAnalytics/query`) for the last 28 days
+- Groups by query, stores top queries in `gsc_query_data`
+- Logs cost as $0.00 (GSC API is free)
+
+### 4. New tab: "Search Console" in ClientDashboard
+- Summary cards: total clicks, total impressions, avg CTR, avg position (from GSC)
+- Table of top queries sorted by impressions, showing clicks, impressions, CTR, position
+- Highlight queries that aren't in the tracked keywords list (opportunity indicator)
+- "Sync GSC" button to pull fresh data
+- If not connected yet, show a "Connect Google Search Console" prompt
+
+### 5. Settings update
+- Add a "Google Search Console" card in Settings tab
+- Shows connection status (connected/not connected)
+- "Connect" button triggers OAuth flow
+- "Disconnect" button to remove credentials
+
+### 6. Feed GSC into keyword suggestions
+- Update `suggest-more-keywords` edge function to include top GSC queries (not yet tracked) as context for the AI, so suggestions are informed by real search data
+
+### Files to create/edit
+1. **Migration** — `gsc_connections` + `gsc_query_data` tables with RLS
+2. **`supabase/functions/gsc-auth/index.ts`** — OAuth flow (auth URL + token exchange)
+3. **`supabase/functions/fetch-gsc-data/index.ts`** — Pull GSC data for a client
+4. **`src/components/dashboard/SearchConsoleTab.tsx`** — New tab UI
+5. **`src/components/dashboard/ClientDashboard.tsx`** — Add Search Console tab
+6. **`src/components/dashboard/SettingsTab.tsx`** — Add GSC connection card
+7. **`supabase/functions/suggest-more-keywords/index.ts`** — Include GSC queries as context
+
+### Setup required from you
+- Create a Google Cloud project with Search Console API enabled
+- Create OAuth 2.0 credentials (Web application type)
+- Provide `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` — I'll prompt you to add these as secrets
 
