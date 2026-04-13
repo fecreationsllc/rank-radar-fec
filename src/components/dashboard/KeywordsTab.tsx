@@ -11,6 +11,7 @@ import { Sparkline } from "@/components/Sparkline";
 import { getRankChange } from "@/lib/rank-utils";
 import { AddKeywordsModal } from "@/components/dashboard/AddKeywordsModal";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, RefreshCw, Search, TrendingUp, TrendingDown, Target, Hash, X, Sparkles, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { SuggestKeywordsModal } from "@/components/dashboard/SuggestKeywordsModal";
@@ -43,6 +44,8 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
   const [suggestedKeywords, setSuggestedKeywords] = useState<string[]>([]);
   const [sortColumn, setSortColumn] = useState<SortColumn>("keyword");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [syncTotal, setSyncTotal] = useState(0);
+  const [syncCompleted, setSyncCompleted] = useState(0);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -186,6 +189,8 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
 
   const handleSync = async () => {
     setSyncing(true);
+    setSyncTotal(0);
+    setSyncCompleted(0);
     try {
       const { data, error } = await supabase.functions.invoke("sync-rankings", { body: { client_id: client.id } });
       if (error) throw error;
@@ -197,9 +202,9 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
         return;
       }
 
+      setSyncTotal(taskCount);
       toast({ title: "Sync queued", description: `${taskCount} ranking checks submitted. Polling for results...` });
 
-      // Poll for results every 15 seconds, up to 6 times (90s)
       let attempts = 0;
       const maxAttempts = 6;
       const pollInterval = setInterval(async () => {
@@ -209,19 +214,25 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
             body: { client_id: client.id },
           });
 
+          const completed = pollData?.completed ?? 0;
+          setSyncCompleted(completed);
+
           if (pollData?.status === "complete" || pollData?.status === "no_pending") {
             clearInterval(pollInterval);
             setSyncing(false);
+            setSyncTotal(0);
+            setSyncCompleted(0);
             queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
             toast({ title: "Rankings updated", description: `${pollData?.total_ranks ?? 0} results processed.` });
-          } else if (pollData?.status === "partial" && pollData?.completed > 0) {
-            // Some done, keep polling
+          } else if (pollData?.status === "partial" && completed > 0) {
             queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
           }
 
           if (attempts >= maxAttempts) {
             clearInterval(pollInterval);
             setSyncing(false);
+            setSyncTotal(0);
+            setSyncCompleted(0);
             if (pollData?.remaining > 0) {
               toast({ title: "Still processing", description: "Some results are still pending. They'll appear on next sync or page refresh." });
             }
@@ -231,6 +242,8 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
           if (attempts >= maxAttempts) {
             clearInterval(pollInterval);
             setSyncing(false);
+            setSyncTotal(0);
+            setSyncCompleted(0);
             queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
           }
         }
@@ -238,6 +251,8 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
     } catch {
       toast({ title: "Sync failed", variant: "destructive" });
       setSyncing(false);
+      setSyncTotal(0);
+      setSyncCompleted(0);
     }
   };
 
@@ -315,6 +330,19 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
           <RefreshCw className={`h-4 w-4 mr-1 ${syncing ? "animate-spin" : ""}`} /> Sync Now
         </Button>
       </div>
+
+      {/* Sync progress */}
+      {syncing && syncTotal > 0 && (
+        <Card className="rounded-xl">
+          <CardContent className="p-4 space-y-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <span>Syncing rankings... {syncCompleted} of {syncTotal} completed</span>
+            </div>
+            <Progress value={syncTotal > 0 ? (syncCompleted / syncTotal) * 100 : 0} className="h-2" />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Table */}
       {sortedData.length === 0 ? (
