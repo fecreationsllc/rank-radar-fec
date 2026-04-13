@@ -32,8 +32,9 @@ export function AddKeywordsModal({ open, onOpenChange, clientId, onKeywordsAdded
     if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
     else {
       toast({ title: `${unique.length} keywords added` });
-      // Trigger sync for this client
+      // Trigger sync and volume fetch for this client
       supabase.functions.invoke("sync-rankings", { body: { client_id: clientId } }).catch(() => {});
+      supabase.functions.invoke("fetch-search-volume", { body: { client_id: clientId } }).catch(() => {});
       onKeywordsAdded();
       setText("");
       setTargetUrl("");

@@ -433,7 +433,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
                       {row.keyword.target_url ?? "—"}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {row.searchVolume !== null ? row.searchVolume.toLocaleString() : "—"}
+                      {row.searchVolume !== null ? row.searchVolume.toLocaleString() : row.volumeFetched ? "N/A" : "—"}
                     </TableCell>
                     <TableCell>
                       {row.today !== null ? (
