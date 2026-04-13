@@ -152,6 +152,74 @@ export type Database = {
           },
         ]
       }
+      gsc_connections: {
+        Row: {
+          access_token: string
+          created_at: string
+          id: string
+          refresh_token: string
+          token_expires_at: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          id?: string
+          refresh_token: string
+          token_expires_at: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          id?: string
+          refresh_token?: string
+          token_expires_at?: string
+        }
+        Relationships: []
+      }
+      gsc_query_data: {
+        Row: {
+          clicks: number | null
+          client_id: string
+          ctr: number | null
+          date: string
+          fetched_at: string
+          id: string
+          impressions: number | null
+          position: number | null
+          query: string
+        }
+        Insert: {
+          clicks?: number | null
+          client_id: string
+          ctr?: number | null
+          date: string
+          fetched_at?: string
+          id?: string
+          impressions?: number | null
+          position?: number | null
+          query: string
+        }
+        Update: {
+          clicks?: number | null
+          client_id?: string
+          ctr?: number | null
+          date?: string
+          fetched_at?: string
+          id?: string
+          impressions?: number | null
+          position?: number | null
+          query?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gsc_query_data_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       keyword_search_volume: {
         Row: {
           city_id: string
