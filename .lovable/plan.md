@@ -1,35 +1,44 @@
 
 
-# Fix blank white screen on "Suggest More" keywords
+# Add Sortable Columns to All Tables + Google Cloud API in Costs
 
-## Problem
-When you click "Suggest More," the edge function scrapes your website (homepage + up to 5 subpages) and calls the AI gateway. This can take 15-30 seconds, which likely exceeds the edge function timeout. When it times out, the response isn't valid JSON, causing an unhandled error that crashes the React app into a white screen.
-
-## Fix — Two parts
-
-### 1. Add error boundary protection in KeywordsTab
-Wrap the `supabase.functions.invoke` call with better error handling to catch non-JSON responses and timeout errors, preventing the app crash.
+## Part 1: Sortable columns on Keywords table
 
 **File**: `src/components/dashboard/KeywordsTab.tsx`
-- Check if `data` contains an error field (edge function returns `{error: ...}` on failure)
-- Ensure `setSuggesting(false)` always runs even on unexpected errors
-- Show a toast with a helpful message instead of crashing
 
-### 2. Add timeout and reduce scraping in the edge function
-Make the edge function faster and more resilient.
+Add `sortColumn` / `sortDirection` state and a `sortedData` memo (same pattern as SearchConsoleTab). Make all table headers clickable with arrow icons.
 
-**File**: `supabase/functions/suggest-more-keywords/index.ts`
-- Reduce subpage scraping from 5 to 2 pages (biggest time saver)
-- Reduce content per page from 2000 to 1000 chars
-- Add a shorter fetch timeout (3s instead of 5s per page)
-- Wrap the entire handler in a try/catch that always returns valid JSON
+Sortable columns: Keyword (string), Landing Page (string), Volume (numeric), Today (numeric), Δ Week (numeric), Last Week (numeric), Last Month (numeric), City (string).
 
-### 3. Add React ErrorBoundary around the modal
-Add a simple error boundary so even if something unexpected happens, the app doesn't go white — it shows a fallback UI instead.
+## Part 2: Sortable columns on Costs table
 
-**File**: `src/components/dashboard/SuggestKeywordsModal.tsx`
-- Wrap content in an error boundary that catches render errors
+**File**: `src/components/dashboard/CostsTab.tsx`
 
-## Summary
-The root cause is the edge function taking too long and returning a non-JSON error. The fix makes the function faster and ensures the frontend handles errors gracefully instead of crashing.
+Add sorting to the "Recent API Calls" log table. Sortable columns: Date, Function, Provider, Endpoint (string), Tasks (numeric), Cost (numeric). Default: Date descending (current order).
+
+## Part 3: Add Google Cloud as a provider in Costs
+
+**File**: `src/components/dashboard/CostsTab.tsx`
+
+Add to `PROVIDER_COLORS` and `PROVIDER_LABELS`:
+- `google` → "Google Cloud" with `chart-5` color
+
+This ensures any `api_usage_log` entries with `api_provider = 'google'` display correctly in the chart and table.
+
+Also update the edge functions that call Google APIs (`gsc-auth`, `fetch-gsc-data`) to log their API usage to `api_usage_log` with `api_provider: 'google'`.
+
+**Files**: `supabase/functions/gsc-auth/index.ts`, `supabase/functions/fetch-gsc-data/index.ts`
+
+Add cost logging after successful Google API calls (token exchanges, Search Console data fetches). Use a nominal cost per call since Google Search Console API is free-tier but worth tracking for visibility.
+
+## Part 4: Competitors tab — no table to sort
+
+The Competitors tab uses a card grid layout, not a table. No sorting changes needed there.
+
+## Summary of files changed
+
+1. `src/components/dashboard/KeywordsTab.tsx` — add sortable headers
+2. `src/components/dashboard/CostsTab.tsx` — add sortable headers + Google Cloud provider
+3. `supabase/functions/fetch-gsc-data/index.ts` — log API usage
+4. `supabase/functions/gsc-auth/index.ts` — log API usage
 
