@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Copy, Loader2, Search, Trash2, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Copy, Loader2, Search, Trash2, X, CheckCircle2, XCircle } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 interface SettingsTabProps {
   client: Tables<"clients">;
@@ -27,7 +27,9 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
   const [alertEmail, setAlertEmail] = useState(client.alert_email ?? "");
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const [connectingGsc, setConnectingGsc] = useState(false);
 
   // City search state
   const [citySearch, setCitySearch] = useState("");
