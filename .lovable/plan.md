@@ -1,27 +1,29 @@
 
 
-# Fix: DataForSEO results fetched too early, recorded as empty
+# Fix: "Nothing to sync" caused by stale pending tasks
 
 ## Root cause
-The `fetch-ranking-results` function polls DataForSEO ~14 seconds after task creation. DataForSEO hasn't finished processing yet, but instead of returning status code 40601 ("not ready"), it sometimes returns a valid-looking response with an empty `items` array. The current code only checks for `status_code === 40601` to skip — so it treats empty results as "done," inserts a null position into `rank_history`, and marks the task `completed`. The data is permanently lost.
+The cleanup migration only deleted `completed` ranking_tasks. There are **20 stale `pending` tasks** for Spagnoli still in the database. The duplicate-sync guard (lines 35-46 of `sync-rankings`) sees these and returns `task_count: 0`, which the UI displays as "Nothing to sync."
 
 ## Fix
 
-### 1. `supabase/functions/fetch-ranking-results/index.ts`
-- After checking `status_code === 40601`, also check if `items` is null/empty. If the result has zero organic items AND the task was created less than 5 minutes ago, treat it as "not ready" and **skip** (don't mark completed).
-- Add a log line showing `taskResult.status_code` and `items?.length` for every task so we can debug future issues.
-- Only mark a task completed + insert null position if the task is older than 5 minutes (meaning DataForSEO genuinely found nothing).
+### 1. Database cleanup (migration)
+Delete all stale `pending` ranking_tasks — these are from previous syncs where DataForSEO already processed the results but the tasks were never marked completed (due to the earlier bugs).
 
-### 2. `src/components/dashboard/KeywordsTab.tsx`
-- Increase initial poll delay from 5s to **20 seconds** — DataForSEO typically needs 15-30 seconds.
-- Keep subsequent poll interval at 10 seconds.
+```sql
+DELETE FROM public.ranking_tasks WHERE status = 'pending';
+```
 
-### 3. Clean up bad data (migration)
-- Delete all `rank_history` rows where `position IS NULL` for the Spagnoli client, so the next sync gets clean results.
-- Reset `ranking_tasks` status back to `pending` for the most recent Spagnoli tasks so they can be re-fetched, OR delete them so a fresh sync can be triggered.
+### 2. Improve the duplicate-sync guard (`supabase/functions/sync-rankings/index.ts`)
+The current guard returns `task_count: 0` which triggers the "Nothing to sync" toast. Two improvements:
+- Return a **distinct message** like `"already_syncing"` so the UI can show "Sync already in progress" instead of "Nothing to sync"
+- Add a **staleness check**: only block if pending tasks are less than 10 minutes old. If they're older, they're stale — delete them and proceed with a fresh sync.
+
+### 3. Update UI toast logic (`src/components/dashboard/KeywordsTab.tsx`)
+Check for the `"already_syncing"` message from the response and show an appropriate toast ("Sync already in progress") instead of "Nothing to sync."
 
 ## Files changed
-1. `supabase/functions/fetch-ranking-results/index.ts` — skip empty results for recent tasks
-2. `src/components/dashboard/KeywordsTab.tsx` — increase initial poll delay to 20s
-3. New migration — clean up null rank_history + stale ranking_tasks for re-sync
+1. New migration — delete stale pending ranking_tasks
+2. `supabase/functions/sync-rankings/index.ts` — add staleness check + distinct response
+3. `src/components/dashboard/KeywordsTab.tsx` — handle "already_syncing" response
 
