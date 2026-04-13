@@ -221,7 +221,7 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {aggregated.slice(0, 50).map((q) => (
+                {sortedData.slice(0, 50).map((q) => (
                   <TableRow key={q.query}>
                     <TableCell className="font-medium">{q.query}</TableCell>
                     <TableCell className="text-right">{q.clicks.toLocaleString()}</TableCell>
