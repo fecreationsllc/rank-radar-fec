@@ -147,6 +147,26 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
     toast({ title: `Added ${loc.location_name}` });
   };
 
+  const handleSendTestAlert = async () => {
+    if (!client.alert_email) {
+      toast({ title: "No alert email set", description: "Add an alert email above first.", variant: "destructive" });
+      return;
+    }
+    setSendingTestAlert(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-test-alert", {
+        body: { client_id: client.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: "Test alert sent!", description: `Check ${client.alert_email}` });
+    } catch (e: any) {
+      toast({ title: "Failed to send test alert", description: e.message, variant: "destructive" });
+    } finally {
+      setSendingTestAlert(false);
+    }
+  };
+
   const reportUrl = `${window.location.origin}/report/${client.report_token}`;
 
   return (
