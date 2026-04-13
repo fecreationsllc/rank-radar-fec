@@ -425,6 +425,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
                 <TableHead className="cursor-pointer select-none" onClick={() => handleSort("keyword")}>
                   <span className="flex items-center">Keyword <SortIcon col="keyword" /></span>
                 </TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="cursor-pointer select-none" onClick={() => handleSort("landing_page")}>
                   <span className="flex items-center">Landing Page <SortIcon col="landing_page" /></span>
                 </TableHead>
