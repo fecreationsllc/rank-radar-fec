@@ -1,44 +1,55 @@
 
 
-# Add Sortable Columns to All Tables + Google Cloud API in Costs
+# Fix sync-rankings timeout — split into post + poll
 
-## Part 1: Sortable columns on Keywords table
+## Problem
+The `sync-rankings` edge function has a **hard-coded 60-second `setTimeout`** (line 84) where it sleeps waiting for DataForSEO to process tasks before fetching results. This causes the edge function to exceed its timeout limit, resulting in the spinner that never stops and the delayed/vague toast message.
 
-**File**: `src/components/dashboard/KeywordsTab.tsx`
+## Solution: Split into two edge functions
 
-Add `sortColumn` / `sortDirection` state and a `sortedData` memo (same pattern as SearchConsoleTab). Make all table headers clickable with arrow icons.
+Instead of one function that posts tasks, sleeps 60s, then fetches results, split the work:
 
-Sortable columns: Keyword (string), Landing Page (string), Volume (numeric), Today (numeric), Δ Week (numeric), Last Week (numeric), Last Month (numeric), City (string).
+### 1. New edge function: `fetch-ranking-results`
+A second edge function that fetches completed results from DataForSEO by task ID.
 
-## Part 2: Sortable columns on Costs table
+### 2. Refactor `sync-rankings` to return immediately
+- Post tasks to DataForSEO (keep as-is)
+- Save task IDs + metadata to a new `ranking_tasks` table
+- Return immediately with `{ status: "queued", task_count: N }`
+- Remove the 60-second sleep entirely
 
-**File**: `src/components/dashboard/CostsTab.tsx`
+### 3. New table: `ranking_tasks`
+Stores pending DataForSEO task IDs so results can be fetched later.
 
-Add sorting to the "Recent API Calls" log table. Sortable columns: Date, Function, Provider, Endpoint (string), Tasks (numeric), Cost (numeric). Default: Date descending (current order).
+```sql
+create table public.ranking_tasks (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid references clients(id) on delete cascade not null,
+  dataforseo_task_id text not null,
+  keyword_id uuid references keywords(id) on delete cascade not null,
+  city_id uuid references client_cities(id) on delete cascade not null,
+  status text not null default 'pending',
+  created_at timestamptz default now()
+);
+alter table public.ranking_tasks enable row level security;
+create policy "Users can view own ranking tasks" on public.ranking_tasks for select to authenticated using (true);
+```
 
-## Part 3: Add Google Cloud as a provider in Costs
+### 4. Update `fetch-ranking-results` edge function
+- Query `ranking_tasks` where `status = 'pending'` for the given client
+- Fetch results from DataForSEO for each task ID
+- Insert into `rank_history`, update task status to `completed`
+- Handle rank drop alerts and cost logging (moved from sync-rankings)
 
-**File**: `src/components/dashboard/CostsTab.tsx`
+### 5. Update frontend (`KeywordsTab.tsx`)
+- `handleSync`: call `sync-rankings`, get immediate response, show "Sync queued" toast
+- Start polling: call `fetch-ranking-results` every 15 seconds (up to 6 times / 90 seconds)
+- When results come back, invalidate queries and stop polling
+- Show progress: "Checking for results..." indicator instead of infinite spinner
 
-Add to `PROVIDER_COLORS` and `PROVIDER_LABELS`:
-- `google` → "Google Cloud" with `chart-5` color
-
-This ensures any `api_usage_log` entries with `api_provider = 'google'` display correctly in the chart and table.
-
-Also update the edge functions that call Google APIs (`gsc-auth`, `fetch-gsc-data`) to log their API usage to `api_usage_log` with `api_provider: 'google'`.
-
-**Files**: `supabase/functions/gsc-auth/index.ts`, `supabase/functions/fetch-gsc-data/index.ts`
-
-Add cost logging after successful Google API calls (token exchanges, Search Console data fetches). Use a nominal cost per call since Google Search Console API is free-tier but worth tracking for visibility.
-
-## Part 4: Competitors tab — no table to sort
-
-The Competitors tab uses a card grid layout, not a table. No sorting changes needed there.
-
-## Summary of files changed
-
-1. `src/components/dashboard/KeywordsTab.tsx` — add sortable headers
-2. `src/components/dashboard/CostsTab.tsx` — add sortable headers + Google Cloud provider
-3. `supabase/functions/fetch-gsc-data/index.ts` — log API usage
-4. `supabase/functions/gsc-auth/index.ts` — log API usage
+### Files changed
+1. **New migration** — create `ranking_tasks` table
+2. **`supabase/functions/sync-rankings/index.ts`** — remove sleep + result fetching, save task IDs to DB, return immediately
+3. **New `supabase/functions/fetch-ranking-results/index.ts`** — fetch results from DataForSEO, insert rank_history
+4. **`src/components/dashboard/KeywordsTab.tsx`** — immediate response handling + polling logic
 
