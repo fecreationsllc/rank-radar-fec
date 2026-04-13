@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -19,7 +20,6 @@ serve(async (req) => {
 
     const DATAFORSEO_LOGIN = Deno.env.get("DATAFORSEO_LOGIN")!;
     const DATAFORSEO_PASSWORD = Deno.env.get("DATAFORSEO_PASSWORD")!;
-    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     const dfAuth = "Basic " + btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`);
 
     // Get keywords and cities
@@ -28,11 +28,10 @@ serve(async (req) => {
     const { data: keywords } = await keywordsQuery;
     if (!keywords?.length) return new Response(JSON.stringify({ message: "No keywords" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    // Get cities for each client
     const clientIds = [...new Set(keywords.map((k: any) => k.client_id))];
     const { data: cities } = await supabase.from("client_cities").select("*").in("client_id", clientIds);
 
-    // Build tasks - one per keyword+city pair
+    // Build tasks
     const tasks: any[] = [];
     const taskMeta: { keyword_id: string; city_id: string; client_domain: string; client_id: string }[] = [];
 
@@ -59,7 +58,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ message: "No tasks to process" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Post tasks to DataForSEO (batch)
+    // Post tasks to DataForSEO
     const postRes = await fetch("https://api.dataforseo.com/v3/serp/google/organic/task_post", {
       method: "POST",
       headers: { Authorization: dfAuth, "Content-Type": "application/json" },
@@ -71,83 +70,34 @@ serve(async (req) => {
       throw new Error(`DataForSEO task_post failed: ${JSON.stringify(postData)}`);
     }
 
-    // Map task IDs to our metadata
-    const taskIds: { id: string; meta: typeof taskMeta[0] }[] = [];
+    // Save task IDs to ranking_tasks table
+    const taskInserts: any[] = [];
     for (let i = 0; i < (postData.tasks?.length ?? 0); i++) {
       const task = postData.tasks[i];
       if (task?.id) {
-        taskIds.push({ id: task.id, meta: taskMeta[i] });
+        taskInserts.push({
+          client_id: taskMeta[i].client_id,
+          dataforseo_task_id: task.id,
+          keyword_id: taskMeta[i].keyword_id,
+          city_id: taskMeta[i].city_id,
+          status: "pending",
+        });
       }
     }
 
-    // Wait for tasks to process
-    await new Promise((r) => setTimeout(r, 60000));
-
-    // Fetch results
-    const rankInserts: any[] = [];
-    const alerts: { client_id: string; keyword: string; old_pos: number; new_pos: number }[] = [];
-
-    for (const { id, meta } of taskIds) {
-      try {
-        const resultRes = await fetch(`https://api.dataforseo.com/v3/serp/google/organic/task_get/advanced/${id}`, {
-          headers: { Authorization: dfAuth },
-        });
-        const resultData = await resultRes.json();
-
-        const items = resultData.tasks?.[0]?.result?.[0]?.items ?? [];
-        const organicItems = items.filter((item: any) => item.type === "organic");
-
-        let position: number | null = null;
-        for (const item of organicItems) {
-          if (item.domain && meta.client_domain && item.domain.includes(meta.client_domain)) {
-            position = item.rank_absolute;
-            break;
-          }
-        }
-
-        rankInserts.push({
-          keyword_id: meta.keyword_id,
-          city_id: meta.city_id,
-          position,
-        });
-
-        // Check for rank drops
-        if (position !== null) {
-          const { data: prevRanks } = await supabase
-            .from("rank_history")
-            .select("position")
-            .eq("keyword_id", meta.keyword_id)
-            .eq("city_id", meta.city_id)
-            .order("checked_at", { ascending: false })
-            .limit(1);
-
-          const prevPosition = prevRanks?.[0]?.position;
-          if (prevPosition !== null && prevPosition !== undefined && position - prevPosition >= 10) {
-            const kw = (keywords as any[]).find((k: any) => k.id === meta.keyword_id);
-            alerts.push({
-              client_id: meta.client_id,
-              keyword: kw?.keyword ?? "",
-              old_pos: prevPosition,
-              new_pos: position,
-            });
-          }
-        }
-      } catch (e) {
-        console.error(`Failed to fetch result for task ${id}:`, e);
+    if (taskInserts.length > 0) {
+      const { error: insertError } = await supabase.from("ranking_tasks").insert(taskInserts);
+      if (insertError) {
+        console.error("Failed to insert ranking_tasks:", insertError);
+        throw new Error("Failed to save task metadata");
       }
     }
 
-    // Insert rank history
-    if (rankInserts.length > 0) {
-      await supabase.from("rank_history").insert(rankInserts);
-    }
-
-    // Log DataForSEO SERP cost: $0.002 per task
-    if (taskIds.length > 0) {
+    // Log DataForSEO SERP cost
+    if (taskInserts.length > 0) {
       const costPerTask = 0.002;
-      // Group by client_id for per-client cost logging
       const costByClient: Record<string, number> = {};
-      for (const { meta } of taskIds) {
+      for (const meta of taskMeta) {
         costByClient[meta.client_id] = (costByClient[meta.client_id] ?? 0) + 1;
       }
       for (const [cid, count] of Object.entries(costByClient)) {
@@ -158,32 +108,6 @@ serve(async (req) => {
           endpoint: "serp/google/organic/task_post",
           task_count: count,
           cost_usd: count * costPerTask,
-        });
-      }
-    }
-
-    // Send alert emails (cost: $0.00 free tier)
-    if (alerts.length > 0 && RESEND_API_KEY) {
-      const alertsByClient: Record<string, typeof alerts> = {};
-      for (const a of alerts) {
-        (alertsByClient[a.client_id] ??= []).push(a);
-      }
-
-      for (const [cid, clientAlerts] of Object.entries(alertsByClient)) {
-        const { data: client } = await supabase.from("clients").select("*").eq("id", cid).single();
-        if (!client?.alert_email) continue;
-
-        const body = clientAlerts.map((a) => `• "${a.keyword}" dropped from #${a.old_pos} to #${a.new_pos}`).join("\n");
-
-        await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            from: Deno.env.get("ALERT_FROM_EMAIL") ?? "alerts@rankradar.app",
-            to: [client.alert_email],
-            subject: `Rank drop alert — ${client.name}`,
-            text: `Ranking drops detected for ${client.name}:\n\n${body}`,
-          }),
         });
       }
     }
@@ -215,7 +139,7 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ success: true, processed: rankInserts.length }), {
+    return new Response(JSON.stringify({ status: "queued", task_count: taskInserts.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
