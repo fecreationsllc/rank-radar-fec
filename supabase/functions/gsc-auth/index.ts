@@ -60,6 +60,15 @@ serve(async (req) => {
         token_expires_at: expiresAt,
       });
 
+      // Log API usage
+      await sb.from("api_usage_log").insert({
+        function_name: "gsc-auth",
+        api_provider: "google",
+        endpoint: "oauth2/token",
+        task_count: 1,
+        cost_usd: 0,
+      });
+
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
