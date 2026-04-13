@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -12,7 +12,7 @@ import { getRankChange } from "@/lib/rank-utils";
 import { AddKeywordsModal } from "@/components/dashboard/AddKeywordsModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, RefreshCw, Search, TrendingUp, TrendingDown, Target, Hash, X, Sparkles } from "lucide-react";
+import { Plus, RefreshCw, Search, TrendingUp, TrendingDown, Target, Hash, X, Sparkles, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { SuggestKeywordsModal } from "@/components/dashboard/SuggestKeywordsModal";
 import { Badge } from "@/components/ui/badge";
 import { subDays } from "date-fns";
@@ -31,6 +31,9 @@ interface KeywordWithRanks {
   searchVolume: number | null;
 }
 
+type SortColumn = "keyword" | "landing_page" | "volume" | "today" | "week_change" | "last_week" | "last_month" | "city";
+type SortDirection = "asc" | "desc";
+
 export function KeywordsTab({ client }: KeywordsTabProps) {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -38,8 +41,24 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [suggestedKeywords, setSuggestedKeywords] = useState<string[]>([]);
+  const [sortColumn, setSortColumn] = useState<SortColumn>("keyword");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const handleSort = (col: SortColumn) => {
+    if (sortColumn === col) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(col);
+      setSortDirection(col === "keyword" || col === "landing_page" || col === "city" ? "asc" : "desc");
+    }
+  };
+
+  const SortIcon = ({ col }: { col: SortColumn }) => {
+    if (sortColumn !== col) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+    return sortDirection === "asc" ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
 
   const { data: cities = [] } = useQuery({
     queryKey: ["cities", client.id],
@@ -99,7 +118,6 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
         }
       }
 
-      // If no cities, show keywords without city association
       if (citiesData.length === 0) {
         for (const kw of keywords) {
           rows.push({
@@ -119,6 +137,45 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
   });
 
   const filtered = keywordRows.filter((r) => r.keyword.keyword.toLowerCase().includes(search.toLowerCase()));
+
+  const sortedData = useMemo(() => {
+    const arr = [...filtered];
+    const dir = sortDirection === "asc" ? 1 : -1;
+
+    arr.sort((a, b) => {
+      const nullToEnd = (va: number | null, vb: number | null) => {
+        if (va === null && vb === null) return 0;
+        if (va === null) return 1;
+        if (vb === null) return -1;
+        return (va - vb) * dir;
+      };
+
+      switch (sortColumn) {
+        case "keyword":
+          return a.keyword.keyword.localeCompare(b.keyword.keyword) * dir;
+        case "landing_page":
+          return (a.keyword.target_url ?? "").localeCompare(b.keyword.target_url ?? "") * dir;
+        case "volume":
+          return nullToEnd(a.searchVolume, b.searchVolume);
+        case "today":
+          return nullToEnd(a.today, b.today);
+        case "week_change": {
+          const ca = a.today !== null && a.weekAgo !== null ? a.weekAgo - a.today : null;
+          const cb = b.today !== null && b.weekAgo !== null ? b.weekAgo - b.today : null;
+          return nullToEnd(ca, cb);
+        }
+        case "last_week":
+          return nullToEnd(a.weekAgo, b.weekAgo);
+        case "last_month":
+          return nullToEnd(a.monthAgo, b.monthAgo);
+        case "city":
+          return a.city.city_name.localeCompare(b.city.city_name) * dir;
+        default:
+          return 0;
+      }
+    });
+    return arr;
+  }, [filtered, sortColumn, sortDirection]);
 
   const avgPosition = filtered.length
     ? Math.round(filtered.reduce((s, r) => s + (r.today ?? 0), 0) / filtered.filter((r) => r.today !== null).length) || 0
@@ -215,7 +272,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
       </div>
 
       {/* Table */}
-      {filtered.length === 0 ? (
+      {sortedData.length === 0 ? (
         <Card className="rounded-xl">
           <CardContent className="py-12 text-center text-muted-foreground">
             <Target className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
@@ -228,20 +285,38 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Keyword</TableHead>
-                <TableHead>Landing Page</TableHead>
-                <TableHead>Volume</TableHead>
-                <TableHead>Today</TableHead>
-                <TableHead>Δ Week</TableHead>
-                <TableHead>Last Week</TableHead>
-                <TableHead>Last Month</TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => handleSort("keyword")}>
+                  <span className="flex items-center">Keyword <SortIcon col="keyword" /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => handleSort("landing_page")}>
+                  <span className="flex items-center">Landing Page <SortIcon col="landing_page" /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => handleSort("volume")}>
+                  <span className="flex items-center">Volume <SortIcon col="volume" /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => handleSort("today")}>
+                  <span className="flex items-center">Today <SortIcon col="today" /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => handleSort("week_change")}>
+                  <span className="flex items-center">Δ Week <SortIcon col="week_change" /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => handleSort("last_week")}>
+                  <span className="flex items-center">Last Week <SortIcon col="last_week" /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => handleSort("last_month")}>
+                  <span className="flex items-center">Last Month <SortIcon col="last_month" /></span>
+                </TableHead>
                 <TableHead>Trend</TableHead>
-                {multiCity && <TableHead>City</TableHead>}
+                {multiCity && (
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort("city")}>
+                    <span className="flex items-center">City <SortIcon col="city" /></span>
+                  </TableHead>
+                )}
                 <TableHead className="w-8" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((row, i) => {
+              {sortedData.map((row, i) => {
                 const weekChange = getRankChange(row.today, row.weekAgo);
                 return (
                   <TableRow key={`${row.keyword.id}-${row.city.id}-${i}`}>
