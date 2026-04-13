@@ -258,6 +258,7 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
         </CardContent>
       </Card>
 
+      <Card className="rounded-xl border-destructive/30">
         <CardHeader><CardTitle className="text-destructive">Danger Zone</CardTitle></CardHeader>
         <CardContent>
           <AlertDialog>
