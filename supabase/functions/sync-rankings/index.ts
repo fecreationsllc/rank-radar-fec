@@ -142,7 +142,27 @@ serve(async (req) => {
       await supabase.from("rank_history").insert(rankInserts);
     }
 
-    // Send alert emails
+    // Log DataForSEO SERP cost: $0.002 per task
+    if (taskIds.length > 0) {
+      const costPerTask = 0.002;
+      // Group by client_id for per-client cost logging
+      const costByClient: Record<string, number> = {};
+      for (const { meta } of taskIds) {
+        costByClient[meta.client_id] = (costByClient[meta.client_id] ?? 0) + 1;
+      }
+      for (const [cid, count] of Object.entries(costByClient)) {
+        await supabase.from("api_usage_log").insert({
+          client_id: cid,
+          function_name: "sync-rankings",
+          api_provider: "dataforseo",
+          endpoint: "serp/google/organic/task_post",
+          task_count: count,
+          cost_usd: count * costPerTask,
+        });
+      }
+    }
+
+    // Send alert emails (cost: $0.00 free tier)
     if (alerts.length > 0 && RESEND_API_KEY) {
       const alertsByClient: Record<string, typeof alerts> = {};
       for (const a of alerts) {

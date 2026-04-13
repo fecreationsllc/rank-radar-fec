@@ -61,6 +61,16 @@ serve(async (req) => {
       await supabase.from("competitors").upsert(competitors, { onConflict: "client_id,domain" });
     }
 
+    // Log DataForSEO cost: $0.002 per competitors_domain call
+    await supabase.from("api_usage_log").insert({
+      client_id,
+      function_name: "discover-competitors",
+      api_provider: "dataforseo",
+      endpoint: "dataforseo_labs/google/competitors_domain/live",
+      task_count: 1,
+      cost_usd: 0.002,
+    });
+
     // Return inserted competitors
     const { data: allCompetitors } = await supabase.from("competitors").select("*").eq("client_id", client_id);
 
