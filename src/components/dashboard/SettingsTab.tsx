@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Copy, Loader2, Search, Trash2, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Copy, Loader2, Search, Trash2, X, CheckCircle2, XCircle } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 interface SettingsTabProps {
   client: Tables<"clients">;
@@ -27,7 +27,9 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
   const [alertEmail, setAlertEmail] = useState(client.alert_email ?? "");
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const [connectingGsc, setConnectingGsc] = useState(false);
 
   // City search state
   const [citySearch, setCitySearch] = useState("");
@@ -42,6 +44,60 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
       return data ?? [];
     },
   });
+
+  const { data: gscStatus, refetch: refetchGscStatus } = useQuery({
+    queryKey: ["gsc-status"],
+    queryFn: async () => {
+      const { data } = await supabase.functions.invoke("gsc-auth", { body: { action: "status" } });
+      return data as { connected: boolean; connected_at?: string };
+    },
+  });
+
+  // Handle GSC OAuth callback
+  useEffect(() => {
+    const code = searchParams.get("code");
+    if (code) {
+      setConnectingGsc(true);
+      const redirectUri = `${window.location.origin}${window.location.pathname}`;
+      supabase.functions.invoke("gsc-auth", {
+        body: { action: "exchange_code", code, redirect_uri: redirectUri },
+      }).then(({ data, error }) => {
+        if (error || data?.error) {
+          toast({ title: "GSC connection failed", description: data?.error || error?.message, variant: "destructive" });
+        } else {
+          toast({ title: "Google Search Console connected!" });
+          refetchGscStatus();
+        }
+        setConnectingGsc(false);
+        // Clean URL
+        searchParams.delete("code");
+        searchParams.delete("scope");
+        setSearchParams(searchParams, { replace: true });
+      });
+    }
+  }, []);
+
+  const handleConnectGsc = async () => {
+    setConnectingGsc(true);
+    try {
+      const redirectUri = `${window.location.origin}${window.location.pathname}`;
+      const { data } = await supabase.functions.invoke("gsc-auth", {
+        body: { action: "get_auth_url", redirect_uri: redirectUri },
+      });
+      if (data?.auth_url) {
+        window.location.href = data.auth_url;
+      }
+    } catch (e: any) {
+      toast({ title: "Failed to start OAuth", description: e.message, variant: "destructive" });
+      setConnectingGsc(false);
+    }
+  };
+
+  const handleDisconnectGsc = async () => {
+    await supabase.functions.invoke("gsc-auth", { body: { action: "disconnect" } });
+    refetchGscStatus();
+    toast({ title: "GSC disconnected" });
+  };
 
   const handleSave = async () => {
     await supabase.from("clients").update({ name, domain, alert_email: alertEmail || null }).eq("id", client.id);
@@ -166,6 +222,39 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
               <Copy className="h-4 w-4" />
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-xl">
+        <CardHeader><CardTitle>Google Search Console</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {gscStatus?.connected ? (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                <div>
+                  <p className="text-sm font-medium">Connected</p>
+                  <p className="text-xs text-muted-foreground">
+                    Since {gscStatus.connected_at ? new Date(gscStatus.connected_at).toLocaleDateString() : "recently"}
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleDisconnectGsc}>
+                <XCircle className="h-4 w-4 mr-1" /> Disconnect
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <XCircle className="h-5 w-5 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Not connected</p>
+              </div>
+              <Button onClick={handleConnectGsc} disabled={connectingGsc} size="sm">
+                {connectingGsc ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                Connect Google
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
