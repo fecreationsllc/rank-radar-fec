@@ -28,7 +28,6 @@ const STATUS_OPTIONS = [
 function getStatusStyle(status: string) {
   return STATUS_OPTIONS.find((s) => s.value === status) ?? STATUS_OPTIONS[0];
 }
-import { subDays } from "date-fns";
 
 interface KeywordsTabProps {
   client: Tables<"clients">;
