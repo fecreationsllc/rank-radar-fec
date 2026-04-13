@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Copy, Loader2, Search, Trash2, X, CheckCircle2, XCircle } from "lucide-react";
+import { Copy, Loader2, Mail, Search, Trash2, X, CheckCircle2, XCircle } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 interface SettingsTabProps {
@@ -30,6 +30,7 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [connectingGsc, setConnectingGsc] = useState(false);
+  const [sendingTestAlert, setSendingTestAlert] = useState(false);
 
   // City search state
   const [citySearch, setCitySearch] = useState("");
@@ -146,6 +147,26 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
     toast({ title: `Added ${loc.location_name}` });
   };
 
+  const handleSendTestAlert = async () => {
+    if (!client.alert_email) {
+      toast({ title: "No alert email set", description: "Add an alert email above first.", variant: "destructive" });
+      return;
+    }
+    setSendingTestAlert(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-test-alert", {
+        body: { client_id: client.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: "Test alert sent!", description: `Check ${client.alert_email}` });
+    } catch (e: any) {
+      toast({ title: "Failed to send test alert", description: e.message, variant: "destructive" });
+    } finally {
+      setSendingTestAlert(false);
+    }
+  };
+
   const reportUrl = `${window.location.origin}/report/${client.report_token}`;
 
   return (
@@ -255,6 +276,23 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
               </Button>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-xl">
+        <CardHeader><CardTitle>Rank Drop Alerts</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            When a keyword drops 10+ positions, an alert email is sent to <strong>{client.alert_email || "—"}</strong>.
+          </p>
+          <Button
+            variant="outline"
+            onClick={handleSendTestAlert}
+            disabled={sendingTestAlert || !client.alert_email}
+          >
+            {sendingTestAlert ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Mail className="h-4 w-4 mr-1" />}
+            Send Test Alert
+          </Button>
         </CardContent>
       </Card>
 
