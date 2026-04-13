@@ -153,11 +153,15 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
         body: { client_id: client.id },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       setSuggestedKeywords(data?.keywords ?? []);
     } catch (e) {
-      toast({ title: "Failed to get suggestions", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
+      console.error("Suggest keywords error:", e);
+      toast({ title: "Failed to get suggestions", description: e instanceof Error ? e.message : "Please try again.", variant: "destructive" });
+      setSuggestOpen(false);
+    } finally {
+      setSuggesting(false);
     }
-    setSuggesting(false);
   };
 
   const handleAddSuggested = async (keywords: string[]) => {
