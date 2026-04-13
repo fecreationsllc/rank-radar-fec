@@ -30,6 +30,7 @@ interface KeywordWithRanks {
   monthAgo: number | null;
   history: (number | null)[];
   searchVolume: number | null;
+  volumeFetched: boolean;
 }
 
 type SortColumn = "keyword" | "landing_page" | "volume" | "today" | "week_change" | "last_week" | "last_month" | "city";
