@@ -30,6 +30,7 @@ interface KeywordWithRanks {
   monthAgo: number | null;
   history: (number | null)[];
   searchVolume: number | null;
+  volumeFetched: boolean;
 }
 
 type SortColumn = "keyword" | "landing_page" | "volume" | "today" | "week_change" | "last_week" | "last_month" | "city";
@@ -117,6 +118,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
             monthAgo: monthRecord?.position ?? null,
             history: cityHistory.map((h) => h.position),
             searchVolume: vol?.search_volume ?? null,
+            volumeFetched: !!vol,
           });
         }
       }
@@ -131,6 +133,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
             monthAgo: null,
             history: [],
             searchVolume: null,
+            volumeFetched: false,
           });
         }
       }
@@ -430,7 +433,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
                       {row.keyword.target_url ?? "—"}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {row.searchVolume !== null ? row.searchVolume.toLocaleString() : "—"}
+                      {row.searchVolume !== null ? row.searchVolume.toLocaleString() : row.volumeFetched ? "N/A" : "—"}
                     </TableCell>
                     <TableCell>
                       {row.today !== null ? (

@@ -86,12 +86,14 @@ serve(async (req) => {
         const normalizedClient = normalizeDomain(clientDomain);
 
         let position: number | null = null;
+        let rankedUrl: string | null = null;
         for (const item of organicItems) {
           const normalizedItem = normalizeDomain(item.domain ?? "");
           if (normalizedClient && normalizedItem && (
             normalizedItem.includes(normalizedClient) || normalizedClient.includes(normalizedItem)
           )) {
             position = item.rank_absolute;
+            rankedUrl = item.url ?? null;
             break;
           }
         }
@@ -103,6 +105,14 @@ serve(async (req) => {
         });
 
         completedTaskIds.push(task.id);
+
+        // Auto-populate landing page if not set
+        if (rankedUrl) {
+          const kw = (keywords ?? []).find((k: any) => k.id === task.keyword_id);
+          if (kw && !kw.target_url) {
+            await supabase.from("keywords").update({ target_url: rankedUrl }).eq("id", task.keyword_id);
+          }
+        }
 
         // Check for rank drops
         if (position !== null) {
