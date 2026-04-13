@@ -118,6 +118,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
             monthAgo: monthRecord?.position ?? null,
             history: cityHistory.map((h) => h.position),
             searchVolume: vol?.search_volume ?? null,
+            volumeFetched: !!vol,
           });
         }
       }
@@ -132,6 +133,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
             monthAgo: null,
             history: [],
             searchVolume: null,
+            volumeFetched: false,
           });
         }
       }
