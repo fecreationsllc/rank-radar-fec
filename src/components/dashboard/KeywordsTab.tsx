@@ -11,6 +11,7 @@ import { Sparkline } from "@/components/Sparkline";
 import { getRankChange } from "@/lib/rank-utils";
 import { AddKeywordsModal } from "@/components/dashboard/AddKeywordsModal";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, RefreshCw, Search, TrendingUp, TrendingDown, Target, Hash, X, Sparkles, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { SuggestKeywordsModal } from "@/components/dashboard/SuggestKeywordsModal";
