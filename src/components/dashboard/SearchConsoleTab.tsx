@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, RefreshCw, MousePointerClick, Eye, Target, TrendingUp, Sparkles } from "lucide-react";
+import { Loader2, RefreshCw, MousePointerClick, Eye, Target, TrendingUp, Sparkles, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+
+type SortColumn = "query" | "clicks" | "impressions" | "ctr" | "position" | "status";
+type SortDirection = "asc" | "desc";
 
 interface SearchConsoleTabProps {
   client: Tables<"clients">;
