@@ -16,6 +16,18 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, RefreshCw, Search, TrendingUp, TrendingDown, Target, Hash, X, Sparkles, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { SuggestKeywordsModal } from "@/components/dashboard/SuggestKeywordsModal";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { subDays } from "date-fns";
+
+const STATUS_OPTIONS = [
+  { value: "monitoring", label: "Monitoring", className: "bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200" },
+  { value: "optimizing", label: "Optimizing", className: "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200" },
+  { value: "low_priority", label: "Low Priority", className: "bg-gray-100 text-gray-500 hover:bg-gray-200 border-gray-200" },
+] as const;
+
+function getStatusStyle(status: string) {
+  return STATUS_OPTIONS.find((s) => s.value === status) ?? STATUS_OPTIONS[0];
+}
 import { subDays } from "date-fns";
 
 interface KeywordsTabProps {
