@@ -30,6 +30,7 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [connectingGsc, setConnectingGsc] = useState(false);
+  const [sendingTestAlert, setSendingTestAlert] = useState(false);
 
   // City search state
   const [citySearch, setCitySearch] = useState("");
