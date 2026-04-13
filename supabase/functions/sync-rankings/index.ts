@@ -31,6 +31,21 @@ serve(async (req) => {
     const clientIds = [...new Set(keywords.map((k: any) => k.client_id))];
     const { data: cities } = await supabase.from("client_cities").select("*").in("client_id", clientIds);
 
+    // Check for already-pending tasks for this client
+    if (clientId) {
+      const { data: pendingCheck } = await supabase
+        .from("ranking_tasks")
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("status", "pending")
+        .limit(1);
+      if (pendingCheck && pendingCheck.length > 0) {
+        return new Response(JSON.stringify({ message: "Sync already in progress", task_count: 0 }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Build tasks
     const tasks: any[] = [];
     const taskMeta: { keyword_id: string; city_id: string; client_domain: string; client_id: string }[] = [];

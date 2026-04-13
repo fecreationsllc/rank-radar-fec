@@ -67,9 +67,20 @@ serve(async (req) => {
         const items = taskResult.result?.[0]?.items ?? [];
         const organicItems = items.filter((item: any) => item.type === "organic");
 
+        // Log first 5 organic domains for debugging
+        const sampleDomains = organicItems.slice(0, 5).map((it: any) => it.domain);
+        console.log(`Task ${task.dataforseo_task_id} — clientDomain: "${clientDomain}", top5 organic domains:`, sampleDomains);
+
+        // Normalize domain for comparison: strip www. and trailing dots
+        const normalizeDomain = (d: string) => d?.toLowerCase().replace(/^www\./, "").replace(/\.$/, "") ?? "";
+        const normalizedClient = normalizeDomain(clientDomain);
+
         let position: number | null = null;
         for (const item of organicItems) {
-          if (item.domain && clientDomain && item.domain.includes(clientDomain)) {
+          const normalizedItem = normalizeDomain(item.domain ?? "");
+          if (normalizedClient && normalizedItem && (
+            normalizedItem.includes(normalizedClient) || normalizedClient.includes(normalizedItem)
+          )) {
             position = item.rank_absolute;
             break;
           }
