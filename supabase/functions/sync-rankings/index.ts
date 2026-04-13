@@ -35,14 +35,25 @@ serve(async (req) => {
     if (clientId) {
       const { data: pendingCheck } = await supabase
         .from("ranking_tasks")
-        .select("id")
+        .select("id, created_at")
         .eq("client_id", clientId)
         .eq("status", "pending")
         .limit(1);
       if (pendingCheck && pendingCheck.length > 0) {
-        return new Response(JSON.stringify({ message: "Sync already in progress", task_count: 0 }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        const taskAge = Date.now() - new Date(pendingCheck[0].created_at).getTime();
+        const TEN_MINUTES = 10 * 60 * 1000;
+        if (taskAge < TEN_MINUTES) {
+          return new Response(JSON.stringify({ message: "Sync already in progress", task_count: 0 }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        // Stale pending tasks — delete them and proceed with fresh sync
+        console.log(`Deleting ${pendingCheck.length} stale pending tasks for client ${clientId}`);
+        await supabase
+          .from("ranking_tasks")
+          .delete()
+          .eq("client_id", clientId)
+          .eq("status", "pending");
       }
     }
 

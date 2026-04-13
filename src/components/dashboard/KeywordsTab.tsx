@@ -196,6 +196,11 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
       if (error) throw error;
 
       const taskCount = data?.task_count ?? 0;
+      if (data?.message === "Sync already in progress") {
+        toast({ title: "Sync already in progress", description: "Please wait for the current sync to finish." });
+        setSyncing(false);
+        return;
+      }
       if (taskCount === 0) {
         toast({ title: "Nothing to sync", description: "No keywords or cities configured." });
         setSyncing(false);
