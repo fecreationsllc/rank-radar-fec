@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, RefreshCw, MousePointerClick, Eye, Target, TrendingUp, Sparkles } from "lucide-react";
+import { Loader2, RefreshCw, MousePointerClick, Eye, Target, TrendingUp, Sparkles, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+
+type SortColumn = "query" | "clicks" | "impressions" | "ctr" | "position" | "status";
+type SortDirection = "asc" | "desc";
 
 interface SearchConsoleTabProps {
   client: Tables<"clients">;
@@ -16,6 +19,8 @@ interface SearchConsoleTabProps {
 export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
   const { toast } = useToast();
   const [syncing, setSyncing] = useState(false);
+  const [sortColumn, setSortColumn] = useState<SortColumn>("impressions");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   const { data: connectionStatus } = useQuery({
     queryKey: ["gsc-status"],
@@ -106,6 +111,39 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
   const avgPosition = aggregated.length > 0 ? aggregated.reduce((s, q) => s + q.position, 0) / aggregated.length : 0;
   const untrackedCount = aggregated.filter((q) => !q.isTracked).length;
 
+  const handleSort = (col: SortColumn) => {
+    if (sortColumn === col) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(col);
+      setSortDirection(col === "query" ? "asc" : "desc");
+    }
+  };
+
+  const SortIcon = ({ col }: { col: SortColumn }) => {
+    if (sortColumn !== col) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+    return sortDirection === "asc"
+      ? <ArrowUp className="h-3 w-3 ml-1" />
+      : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
+
+  const sortedData = useMemo(() => {
+    const arr = [...aggregated];
+    const dir = sortDirection === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      switch (sortColumn) {
+        case "query": return dir * a.query.localeCompare(b.query);
+        case "clicks": return dir * (a.clicks - b.clicks);
+        case "impressions": return dir * (a.impressions - b.impressions);
+        case "ctr": return dir * (a.ctr - b.ctr);
+        case "position": return dir * (a.position - b.position);
+        case "status": return dir * (Number(a.isTracked) - Number(b.isTracked));
+        default: return 0;
+      }
+    });
+    return arr;
+  }, [aggregated, sortColumn, sortDirection]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -161,17 +199,29 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
           <CardContent>
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Query</TableHead>
-                  <TableHead className="text-right">Clicks</TableHead>
-                  <TableHead className="text-right">Impressions</TableHead>
-                  <TableHead className="text-right">CTR</TableHead>
-                  <TableHead className="text-right">Position</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
+               <TableRow>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort("query")}>
+                    <span className="inline-flex items-center">Query<SortIcon col="query" /></span>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("clicks")}>
+                    <span className="inline-flex items-center justify-end w-full">Clicks<SortIcon col="clicks" /></span>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("impressions")}>
+                    <span className="inline-flex items-center justify-end w-full">Impressions<SortIcon col="impressions" /></span>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("ctr")}>
+                    <span className="inline-flex items-center justify-end w-full">CTR<SortIcon col="ctr" /></span>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("position")}>
+                    <span className="inline-flex items-center justify-end w-full">Position<SortIcon col="position" /></span>
+                  </TableHead>
+                  <TableHead className="text-center cursor-pointer select-none" onClick={() => handleSort("status")}>
+                    <span className="inline-flex items-center justify-center w-full">Status<SortIcon col="status" /></span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {aggregated.slice(0, 50).map((q) => (
+                {sortedData.slice(0, 50).map((q) => (
                   <TableRow key={q.query}>
                     <TableCell className="font-medium">{q.query}</TableCell>
                     <TableCell className="text-right">{q.clicks.toLocaleString()}</TableCell>
