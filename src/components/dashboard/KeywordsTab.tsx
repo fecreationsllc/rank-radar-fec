@@ -187,13 +187,58 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      await supabase.functions.invoke("sync-rankings", { body: { client_id: client.id } });
-      toast({ title: "Sync started", description: "Rankings will be updated shortly." });
-      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] }), 5000);
+      const { data, error } = await supabase.functions.invoke("sync-rankings", { body: { client_id: client.id } });
+      if (error) throw error;
+
+      const taskCount = data?.task_count ?? 0;
+      if (taskCount === 0) {
+        toast({ title: "Nothing to sync", description: "No keywords or cities configured." });
+        setSyncing(false);
+        return;
+      }
+
+      toast({ title: "Sync queued", description: `${taskCount} ranking checks submitted. Polling for results...` });
+
+      // Poll for results every 15 seconds, up to 6 times (90s)
+      let attempts = 0;
+      const maxAttempts = 6;
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        try {
+          const { data: pollData } = await supabase.functions.invoke("fetch-ranking-results", {
+            body: { client_id: client.id },
+          });
+
+          if (pollData?.status === "complete" || pollData?.status === "no_pending") {
+            clearInterval(pollInterval);
+            setSyncing(false);
+            queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
+            toast({ title: "Rankings updated", description: `${pollData?.total_ranks ?? 0} results processed.` });
+          } else if (pollData?.status === "partial" && pollData?.completed > 0) {
+            // Some done, keep polling
+            queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
+          }
+
+          if (attempts >= maxAttempts) {
+            clearInterval(pollInterval);
+            setSyncing(false);
+            if (pollData?.remaining > 0) {
+              toast({ title: "Still processing", description: "Some results are still pending. They'll appear on next sync or page refresh." });
+            }
+            queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
+          }
+        } catch {
+          if (attempts >= maxAttempts) {
+            clearInterval(pollInterval);
+            setSyncing(false);
+            queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
+          }
+        }
+      }, 15000);
     } catch {
       toast({ title: "Sync failed", variant: "destructive" });
+      setSyncing(false);
     }
-    setSyncing(false);
   };
 
   const handleRemoveKeyword = async (keywordId: string) => {

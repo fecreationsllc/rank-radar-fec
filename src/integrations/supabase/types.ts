@@ -330,6 +330,58 @@ export type Database = {
           },
         ]
       }
+      ranking_tasks: {
+        Row: {
+          city_id: string
+          client_id: string
+          created_at: string | null
+          dataforseo_task_id: string
+          id: string
+          keyword_id: string
+          status: string
+        }
+        Insert: {
+          city_id: string
+          client_id: string
+          created_at?: string | null
+          dataforseo_task_id: string
+          id?: string
+          keyword_id: string
+          status?: string
+        }
+        Update: {
+          city_id?: string
+          client_id?: string
+          created_at?: string | null
+          dataforseo_task_id?: string
+          id?: string
+          keyword_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ranking_tasks_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "client_cities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ranking_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ranking_tasks_keyword_id_fkey"
+            columns: ["keyword_id"]
+            isOneToOne: false
+            referencedRelation: "keywords"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       seo_suggestions: {
         Row: {
           client_id: string
