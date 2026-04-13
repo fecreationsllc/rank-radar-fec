@@ -42,7 +42,8 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
   const [syncing, setSyncing] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
-  const [suggestedKeywords, setSuggestedKeywords] = useState<string[]>([]);
+  const [suggestedKeywords, setSuggestedKeywords] = useState<{ keyword: string; volume: number }[]>([]);
+  const [hideNoVolume, setHideNoVolume] = useState(false);
   const [sortColumn, setSortColumn] = useState<SortColumn>("keyword");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [syncTotal, setSyncTotal] = useState(0);
@@ -142,7 +143,12 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
     },
   });
 
-  const filtered = keywordRows.filter((r) => r.keyword.keyword.toLowerCase().includes(search.toLowerCase()));
+  const filtered = keywordRows.filter((r) => {
+    if (!r.keyword.keyword.toLowerCase().includes(search.toLowerCase())) return false;
+    if (hideNoVolume && (r.searchVolume === null || r.searchVolume === 0)) return false;
+    return true;
+  });
+  const hiddenCount = hideNoVolume ? keywordRows.filter(r => r.keyword.keyword.toLowerCase().includes(search.toLowerCase()) && (r.searchVolume === null || r.searchVolume === 0)).length : 0;
 
   const sortedData = useMemo(() => {
     const arr = [...filtered];
@@ -297,7 +303,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      setSuggestedKeywords(data?.keywords ?? []);
+      setSuggestedKeywords((data?.keywords ?? []) as { keyword: string; volume: number }[]);
     } catch (e) {
       console.error("Suggest keywords error:", e);
       toast({ title: "Failed to get suggestions", description: e instanceof Error ? e.message : "Please try again.", variant: "destructive" });
@@ -354,6 +360,13 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
         </Button>
         <Button variant="outline" onClick={handleSync} disabled={syncing}>
           <RefreshCw className={`h-4 w-4 mr-1 ${syncing ? "animate-spin" : ""}`} /> Sync Now
+        </Button>
+        <Button
+          variant={hideNoVolume ? "default" : "outline"}
+          size="sm"
+          onClick={() => setHideNoVolume(!hideNoVolume)}
+        >
+          {hideNoVolume ? `Show All (${hiddenCount} hidden)` : "Hide No Volume"}
         </Button>
       </div>
 
