@@ -45,6 +45,60 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
     },
   });
 
+  const { data: gscStatus, refetch: refetchGscStatus } = useQuery({
+    queryKey: ["gsc-status"],
+    queryFn: async () => {
+      const { data } = await supabase.functions.invoke("gsc-auth", { body: { action: "status" } });
+      return data as { connected: boolean; connected_at?: string };
+    },
+  });
+
+  // Handle GSC OAuth callback
+  useEffect(() => {
+    const code = searchParams.get("code");
+    if (code) {
+      setConnectingGsc(true);
+      const redirectUri = `${window.location.origin}${window.location.pathname}`;
+      supabase.functions.invoke("gsc-auth", {
+        body: { action: "exchange_code", code, redirect_uri: redirectUri },
+      }).then(({ data, error }) => {
+        if (error || data?.error) {
+          toast({ title: "GSC connection failed", description: data?.error || error?.message, variant: "destructive" });
+        } else {
+          toast({ title: "Google Search Console connected!" });
+          refetchGscStatus();
+        }
+        setConnectingGsc(false);
+        // Clean URL
+        searchParams.delete("code");
+        searchParams.delete("scope");
+        setSearchParams(searchParams, { replace: true });
+      });
+    }
+  }, []);
+
+  const handleConnectGsc = async () => {
+    setConnectingGsc(true);
+    try {
+      const redirectUri = `${window.location.origin}${window.location.pathname}`;
+      const { data } = await supabase.functions.invoke("gsc-auth", {
+        body: { action: "get_auth_url", redirect_uri: redirectUri },
+      });
+      if (data?.auth_url) {
+        window.location.href = data.auth_url;
+      }
+    } catch (e: any) {
+      toast({ title: "Failed to start OAuth", description: e.message, variant: "destructive" });
+      setConnectingGsc(false);
+    }
+  };
+
+  const handleDisconnectGsc = async () => {
+    await supabase.functions.invoke("gsc-auth", { body: { action: "disconnect" } });
+    refetchGscStatus();
+    toast({ title: "GSC disconnected" });
+  };
+
   const handleSave = async () => {
     await supabase.from("clients").update({ name, domain, alert_email: alertEmail || null }).eq("id", client.id);
     refetchClients();
