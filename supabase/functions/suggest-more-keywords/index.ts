@@ -91,6 +91,23 @@ serve(async (req) => {
     const { data: cities } = await sb.from("client_cities").select("city_name").eq("client_id", client_id).eq("is_primary", true).limit(1);
     const cityName = cities?.[0]?.city_name ?? "";
 
+    // Fetch GSC queries not yet tracked (for AI context)
+    let gscContext = "";
+    const { data: gscRows } = await sb
+      .from("gsc_query_data")
+      .select("query, clicks, impressions")
+      .eq("client_id", client_id)
+      .order("impressions", { ascending: false })
+      .limit(50);
+    if (gscRows && gscRows.length > 0) {
+      const untrackedGsc = gscRows.filter(r => !existingList.includes(r.query.toLowerCase()));
+      if (untrackedGsc.length > 0) {
+        gscContext = `\n\n--- GOOGLE SEARCH CONSOLE DATA (untracked queries users are finding this site with) ---\n`;
+        gscContext += untrackedGsc.slice(0, 30).map(r => `"${r.query}" (${r.clicks} clicks, ${r.impressions} impressions)`).join("\n");
+        gscContext += `\n---\nThese are real queries from Google Search Console that the business is NOT yet tracking. Prioritize suggesting keywords related to these real queries.`;
+      }
+    }
+
     // Scrape website
     let websiteContent = "";
     const cleanDomain = client.domain.replace(/^(https?:\/\/)?(www\.)?/, "").replace(/\/+$/, "");
@@ -114,14 +131,16 @@ serve(async (req) => {
 
     const hasContent = websiteContent.length > 100;
 
-    const systemPrompt = "You are an SEO keyword research expert. Given a business's existing tracked keywords, analyze gaps in their keyword strategy and suggest 15 additional high-value keywords they should add. Focus on: long-tail variations they're missing, related services not yet covered, local intent keywords, and high-intent commercial terms. Do NOT suggest keywords they already track. Return keywords using the provided tool.";
+    const systemPrompt = "You are an SEO keyword research expert. Given a business's existing tracked keywords, analyze gaps in their keyword strategy and suggest 15 additional high-value keywords they should add. Focus on: long-tail variations they're missing, related services not yet covered, local intent keywords, and high-intent commercial terms. If Google Search Console data is provided, strongly prioritize keywords related to real queries users are already using to find the site. Do NOT suggest keywords they already track. Return keywords using the provided tool.";
 
     let userContent = `Business: ${client.name}\nDomain: ${client.domain}\nTarget City: ${cityName}\n\nCurrently tracked keywords:\n${existingList.join(", ")}\n\n`;
     if (hasContent) {
-      userContent += `--- WEBSITE CONTENT ---\n${websiteContent}---\n\nBased on the website content and the gaps in their current keyword list, suggest 15 additional keywords.`;
-    } else {
-      userContent += `Suggest 15 additional keywords that complement their current list.`;
+      userContent += `--- WEBSITE CONTENT ---\n${websiteContent}---\n\n`;
     }
+    userContent += gscContext;
+    userContent += hasContent
+      ? `\n\nBased on the website content${gscContext ? ", real GSC queries," : ""} and the gaps in their current keyword list, suggest 15 additional keywords.`
+      : `\nSuggest 15 additional keywords that complement their current list.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

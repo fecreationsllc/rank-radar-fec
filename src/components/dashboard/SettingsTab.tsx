@@ -225,7 +225,39 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
         </CardContent>
       </Card>
 
-      <Card className="rounded-xl border-destructive/30">
+      <Card className="rounded-xl">
+        <CardHeader><CardTitle>Google Search Console</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {gscStatus?.connected ? (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                <div>
+                  <p className="text-sm font-medium">Connected</p>
+                  <p className="text-xs text-muted-foreground">
+                    Since {gscStatus.connected_at ? new Date(gscStatus.connected_at).toLocaleDateString() : "recently"}
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleDisconnectGsc}>
+                <XCircle className="h-4 w-4 mr-1" /> Disconnect
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <XCircle className="h-5 w-5 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Not connected</p>
+              </div>
+              <Button onClick={handleConnectGsc} disabled={connectingGsc} size="sm">
+                {connectingGsc ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                Connect Google
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
         <CardHeader><CardTitle className="text-destructive">Danger Zone</CardTitle></CardHeader>
         <CardContent>
           <AlertDialog>
