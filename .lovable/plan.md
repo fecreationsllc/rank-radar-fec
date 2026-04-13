@@ -1,25 +1,35 @@
 
 
-# Add sortable columns to GSC Top Queries table
+# Fix blank white screen on "Suggest More" keywords
 
-## What changes
-Add click-to-sort on all columns (Query, Clicks, Impressions, CTR, Position, Status) in the Search Console tab's "Top Queries" table.
+## Problem
+When you click "Suggest More," the edge function scrapes your website (homepage + up to 5 subpages) and calls the AI gateway. This can take 15-30 seconds, which likely exceeds the edge function timeout. When it times out, the response isn't valid JSON, causing an unhandled error that crashes the React app into a white screen.
 
-## Technical approach
+## Fix — Two parts
 
-**File**: `src/components/dashboard/SearchConsoleTab.tsx`
+### 1. Add error boundary protection in KeywordsTab
+Wrap the `supabase.functions.invoke` call with better error handling to catch non-JSON responses and timeout errors, preventing the app crash.
 
-1. Add `sortColumn` and `sortDirection` state (`useState`)
-2. Add a `sortedData` memo that sorts the `aggregated` array based on current sort state (default: impressions desc, matching current behavior)
-3. Replace static `<TableHead>` elements with clickable headers showing an arrow indicator (▲/▼) for the active sort column — using `ArrowUpDown` icon from lucide-react
-4. Use `sortedData.slice(0, 50)` instead of `aggregated.slice(0, 50)` for rendering
+**File**: `src/components/dashboard/KeywordsTab.tsx`
+- Check if `data` contains an error field (edge function returns `{error: ...}` on failure)
+- Ensure `setSuggesting(false)` always runs even on unexpected errors
+- Show a toast with a helpful message instead of crashing
 
-Sort types:
-- **Query**: alphabetical string sort
-- **Clicks, Impressions, CTR, Position**: numeric sort
-- **Status**: sort by `isTracked` boolean (tracked first or last)
+### 2. Add timeout and reduce scraping in the edge function
+Make the edge function faster and more resilient.
 
-Clicking a column header toggles between ascending and descending. Clicking a different column switches to that column with a sensible default direction (desc for numeric, asc for text).
+**File**: `supabase/functions/suggest-more-keywords/index.ts`
+- Reduce subpage scraping from 5 to 2 pages (biggest time saver)
+- Reduce content per page from 2000 to 1000 chars
+- Add a shorter fetch timeout (3s instead of 5s per page)
+- Wrap the entire handler in a try/catch that always returns valid JSON
 
-No new dependencies needed — just state management and a sort function within the existing component.
+### 3. Add React ErrorBoundary around the modal
+Add a simple error boundary so even if something unexpected happens, the app doesn't go white — it shows a fallback UI instead.
+
+**File**: `src/components/dashboard/SuggestKeywordsModal.tsx`
+- Wrap content in an error boundary that catches render errors
+
+## Summary
+The root cause is the edge function taking too long and returning a non-JSON error. The fix makes the function faster and ensures the frontend handles errors gracefully instead of crashing.
 
