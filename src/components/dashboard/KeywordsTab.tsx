@@ -459,6 +459,27 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
                 return (
                   <TableRow key={`${row.keyword.id}-${row.city.id}-${i}`}>
                     <TableCell className="font-medium">{row.keyword.keyword}</TableCell>
+                    <TableCell>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border cursor-pointer transition-colors ${getStatusStyle((row.keyword as any).status ?? "monitoring").className}`}>
+                            {getStatusStyle((row.keyword as any).status ?? "monitoring").label}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-36 p-1" align="start">
+                          {STATUS_OPTIONS.map((opt) => (
+                            <button
+                              key={opt.value}
+                              className="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-muted flex items-center gap-2"
+                              onClick={() => handleStatusChange(row.keyword.id, opt.value)}
+                            >
+                              <span className={`inline-block w-2 h-2 rounded-full ${opt.value === "monitoring" ? "bg-blue-500" : opt.value === "optimizing" ? "bg-emerald-500" : "bg-gray-400"}`} />
+                              {opt.label}
+                            </button>
+                          ))}
+                        </PopoverContent>
+                      </Popover>
+                    </TableCell>
                     <TableCell className="text-xs text-muted-foreground max-w-[140px] truncate">
                       {row.keyword.target_url ?? "—"}
                     </TableCell>
