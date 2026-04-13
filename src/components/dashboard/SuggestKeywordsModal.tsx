@@ -4,21 +4,26 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Sparkles } from "lucide-react";
 
+interface KeywordSuggestion {
+  keyword: string;
+  volume: number;
+}
+
 interface SuggestKeywordsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  keywords: string[];
+  keywords: KeywordSuggestion[];
   loading: boolean;
   onAdd: (keywords: string[]) => void;
 }
 
 export function SuggestKeywordsModal({ open, onOpenChange, keywords, loading, onAdd }: SuggestKeywordsModalProps) {
-  const [selected, setSelected] = useState<Set<string>>(new Set(keywords));
+  const [selected, setSelected] = useState<Set<string>>(new Set(keywords.map(k => k.keyword)));
 
   // Sync selected when keywords change
   const prevKeywordsRef = useState(keywords)[0];
   if (prevKeywordsRef !== keywords && keywords.length > 0) {
-    setSelected(new Set(keywords));
+    setSelected(new Set(keywords.map(k => k.keyword)));
   }
 
   const toggleKeyword = (kw: string) => {
@@ -34,7 +39,7 @@ export function SuggestKeywordsModal({ open, onOpenChange, keywords, loading, on
     if (selected.size === keywords.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(keywords));
+      setSelected(new Set(keywords.map(k => k.keyword)));
     }
   };
 
@@ -51,10 +56,10 @@ export function SuggestKeywordsModal({ open, onOpenChange, keywords, loading, on
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Analyzing your website and current keywords…</p>
+            <p className="text-sm text-muted-foreground">Analyzing your website and fetching search volumes…</p>
           </div>
         ) : keywords.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">No additional keywords suggested. Your coverage looks good!</p>
+          <p className="text-sm text-muted-foreground py-8 text-center">No keywords found with sufficient search volume (≥50/mo). Your coverage looks good!</p>
         ) : (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -64,10 +69,11 @@ export function SuggestKeywordsModal({ open, onOpenChange, keywords, loading, on
               </Button>
             </div>
             <div className="max-h-80 overflow-y-auto space-y-1">
-              {keywords.map(kw => (
-                <label key={kw} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 cursor-pointer">
-                  <Checkbox checked={selected.has(kw)} onCheckedChange={() => toggleKeyword(kw)} />
-                  <span className="text-sm">{kw}</span>
+              {keywords.map(({ keyword, volume }) => (
+                <label key={keyword} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 cursor-pointer">
+                  <Checkbox checked={selected.has(keyword)} onCheckedChange={() => toggleKeyword(keyword)} />
+                  <span className="text-sm flex-1">{keyword}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">{volume.toLocaleString()}/mo</span>
                 </label>
               ))}
             </div>

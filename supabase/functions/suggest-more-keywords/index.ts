@@ -65,6 +65,44 @@ function prioritizeLinks(links: string[], homepageUrl: string): string[] {
   return dominated.slice(0, 2);
 }
 
+async function fetchSearchVolumes(
+  keywords: string[],
+  locationCode: number,
+  dfAuth: string
+): Promise<Map<string, number>> {
+  const volumeMap = new Map<string, number>();
+  if (keywords.length === 0) return volumeMap;
+
+  try {
+    const res = await fetch("https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/live", {
+      method: "POST",
+      headers: { Authorization: dfAuth, "Content-Type": "application/json" },
+      body: JSON.stringify([{
+        keywords,
+        location_code: locationCode,
+        language_code: "en",
+      }]),
+    });
+
+    if (!res.ok) {
+      console.error("DataForSEO volume API error:", res.status, await res.text());
+      return volumeMap;
+    }
+
+    const data = await res.json();
+    const results = data.tasks?.[0]?.result ?? [];
+    for (const r of results) {
+      if (r.keyword && r.search_volume != null && r.search_volume > 0) {
+        volumeMap.set(r.keyword.toLowerCase(), r.search_volume);
+      }
+    }
+  } catch (e) {
+    console.error("DataForSEO volume fetch error:", e);
+  }
+
+  return volumeMap;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -79,6 +117,10 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const sb = createClient(supabaseUrl, supabaseKey);
 
+    const DATAFORSEO_LOGIN = Deno.env.get("DATAFORSEO_LOGIN")!;
+    const DATAFORSEO_PASSWORD = Deno.env.get("DATAFORSEO_PASSWORD")!;
+    const dfAuth = "Basic " + btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`);
+
     // Fetch client info
     const { data: client } = await sb.from("clients").select("*").eq("id", client_id).single();
     if (!client) throw new Error("Client not found");
@@ -88,8 +130,10 @@ serve(async (req) => {
     const existingList = (existingKws ?? []).map(k => k.keyword.toLowerCase());
 
     // Fetch primary city
-    const { data: cities } = await sb.from("client_cities").select("city_name").eq("client_id", client_id).eq("is_primary", true).limit(1);
-    const cityName = cities?.[0]?.city_name ?? "";
+    const { data: cities } = await sb.from("client_cities").select("*").eq("client_id", client_id).eq("is_primary", true).limit(1);
+    const primaryCity = cities?.[0];
+    const cityName = primaryCity?.city_name ?? "";
+    const locationCode = primaryCity?.location_code ?? 1023191;
 
     // Fetch GSC queries not yet tracked (for AI context)
     let gscContext = "";
@@ -131,7 +175,7 @@ serve(async (req) => {
 
     const hasContent = websiteContent.length > 100;
 
-    const systemPrompt = "You are an SEO keyword research expert. Given a business's existing tracked keywords, analyze gaps in their keyword strategy and suggest 15 additional high-value keywords they should add. Focus on: long-tail variations they're missing, related services not yet covered, local intent keywords, and high-intent commercial terms. If Google Search Console data is provided, strongly prioritize keywords related to real queries users are already using to find the site. Do NOT suggest keywords they already track. Return keywords using the provided tool.";
+    const systemPrompt = "You are an SEO keyword research expert. Given a business's existing tracked keywords, analyze gaps in their keyword strategy and suggest 25 additional high-value keywords they should add. Focus on: long-tail variations they're missing, related services not yet covered, local intent keywords, and high-intent commercial terms. If Google Search Console data is provided, strongly prioritize keywords related to real queries users are already using to find the site. Do NOT suggest keywords they already track. Return keywords using the provided tool.";
 
     let userContent = `Business: ${client.name}\nDomain: ${client.domain}\nTarget City: ${cityName}\n\nCurrently tracked keywords:\n${existingList.join(", ")}\n\n`;
     if (hasContent) {
@@ -139,8 +183,8 @@ serve(async (req) => {
     }
     userContent += gscContext;
     userContent += hasContent
-      ? `\n\nBased on the website content${gscContext ? ", real GSC queries," : ""} and the gaps in their current keyword list, suggest 15 additional keywords.`
-      : `\nSuggest 15 additional keywords that complement their current list.`;
+      ? `\n\nBased on the website content${gscContext ? ", real GSC queries," : ""} and the gaps in their current keyword list, suggest 25 additional keywords (we will filter by search volume afterward).`
+      : `\nSuggest 25 additional keywords that complement their current list.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -158,14 +202,14 @@ serve(async (req) => {
           type: "function",
           function: {
             name: "suggest_keywords",
-            description: "Return exactly 15 additional SEO keywords the business should track.",
+            description: "Return exactly 25 additional SEO keywords the business should track.",
             parameters: {
               type: "object",
               properties: {
                 keywords: {
                   type: "array",
                   items: { type: "string" },
-                  description: "Array of 15 SEO keywords",
+                  description: "Array of 25 SEO keywords",
                 },
               },
               required: ["keywords"],
@@ -200,21 +244,43 @@ serve(async (req) => {
 
     const parsed = JSON.parse(toolCall.function.arguments);
     // Filter out any that already exist
-    const filtered = (parsed.keywords as string[]).filter(
+    const aiKeywords = (parsed.keywords as string[]).filter(
       kw => !existingList.includes(kw.toLowerCase())
     );
 
-    // Log AI cost
-    await sb.from("api_usage_log").insert({
-      client_id,
-      function_name: "suggest-more-keywords",
-      api_provider: "lovable_ai",
-      endpoint: "v1/chat/completions",
-      task_count: 1,
-      cost_usd: 0.001,
-    });
+    // Fetch search volumes from DataForSEO
+    const volumeMap = await fetchSearchVolumes(aiKeywords, locationCode, dfAuth);
 
-    return new Response(JSON.stringify({ keywords: filtered }), {
+    // Filter to only keywords with volume >= 50 and attach volume
+    const keywordsWithVolume = aiKeywords
+      .map(kw => ({
+        keyword: kw,
+        volume: volumeMap.get(kw.toLowerCase()) ?? 0,
+      }))
+      .filter(k => k.volume >= 50)
+      .sort((a, b) => b.volume - a.volume);
+
+    // Log AI cost
+    await sb.from("api_usage_log").insert([
+      {
+        client_id,
+        function_name: "suggest-more-keywords",
+        api_provider: "lovable_ai",
+        endpoint: "v1/chat/completions",
+        task_count: 1,
+        cost_usd: 0.001,
+      },
+      {
+        client_id,
+        function_name: "suggest-more-keywords",
+        api_provider: "dataforseo",
+        endpoint: "keywords_data/google_ads/search_volume/live",
+        task_count: 1,
+        cost_usd: 0.05,
+      },
+    ]);
+
+    return new Response(JSON.stringify({ keywords: keywordsWithVolume }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
