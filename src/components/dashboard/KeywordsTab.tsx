@@ -403,7 +403,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
                   <span className="flex items-center">Today <SortIcon col="today" /></span>
                 </TableHead>
                 <TableHead className="cursor-pointer select-none" onClick={() => handleSort("week_change")}>
-                  <span className="flex items-center">Δ Week <SortIcon col="week_change" /></span>
+                  <span className="flex items-center">Week <SortIcon col="week_change" /></span>
                 </TableHead>
                 <TableHead className="cursor-pointer select-none" onClick={() => handleSort("last_week")}>
                   <span className="flex items-center">Last Week <SortIcon col="last_week" /></span>
