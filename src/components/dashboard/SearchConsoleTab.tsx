@@ -199,13 +199,25 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
           <CardContent>
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Query</TableHead>
-                  <TableHead className="text-right">Clicks</TableHead>
-                  <TableHead className="text-right">Impressions</TableHead>
-                  <TableHead className="text-right">CTR</TableHead>
-                  <TableHead className="text-right">Position</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
+               <TableRow>
+                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort("query")}>
+                    <span className="inline-flex items-center">Query<SortIcon col="query" /></span>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("clicks")}>
+                    <span className="inline-flex items-center justify-end w-full">Clicks<SortIcon col="clicks" /></span>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("impressions")}>
+                    <span className="inline-flex items-center justify-end w-full">Impressions<SortIcon col="impressions" /></span>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("ctr")}>
+                    <span className="inline-flex items-center justify-end w-full">CTR<SortIcon col="ctr" /></span>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("position")}>
+                    <span className="inline-flex items-center justify-end w-full">Position<SortIcon col="position" /></span>
+                  </TableHead>
+                  <TableHead className="text-center cursor-pointer select-none" onClick={() => handleSort("status")}>
+                    <span className="inline-flex items-center justify-center w-full">Status<SortIcon col="status" /></span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
