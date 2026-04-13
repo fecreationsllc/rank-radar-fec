@@ -111,6 +111,39 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
   const avgPosition = aggregated.length > 0 ? aggregated.reduce((s, q) => s + q.position, 0) / aggregated.length : 0;
   const untrackedCount = aggregated.filter((q) => !q.isTracked).length;
 
+  const handleSort = (col: SortColumn) => {
+    if (sortColumn === col) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(col);
+      setSortDirection(col === "query" ? "asc" : "desc");
+    }
+  };
+
+  const SortIcon = ({ col }: { col: SortColumn }) => {
+    if (sortColumn !== col) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+    return sortDirection === "asc"
+      ? <ArrowUp className="h-3 w-3 ml-1" />
+      : <ArrowDown className="h-3 w-3 ml-1" />;
+  };
+
+  const sortedData = useMemo(() => {
+    const arr = [...aggregated];
+    const dir = sortDirection === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      switch (sortColumn) {
+        case "query": return dir * a.query.localeCompare(b.query);
+        case "clicks": return dir * (a.clicks - b.clicks);
+        case "impressions": return dir * (a.impressions - b.impressions);
+        case "ctr": return dir * (a.ctr - b.ctr);
+        case "position": return dir * (a.position - b.position);
+        case "status": return dir * (Number(a.isTracked) - Number(b.isTracked));
+        default: return 0;
+      }
+    });
+    return arr;
+  }, [aggregated, sortColumn, sortDirection]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
