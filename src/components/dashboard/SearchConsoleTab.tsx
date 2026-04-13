@@ -19,6 +19,8 @@ interface SearchConsoleTabProps {
 export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
   const { toast } = useToast();
   const [syncing, setSyncing] = useState(false);
+  const [sortColumn, setSortColumn] = useState<SortColumn>("impressions");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   const { data: connectionStatus } = useQuery({
     queryKey: ["gsc-status"],
