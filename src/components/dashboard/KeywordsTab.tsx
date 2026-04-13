@@ -16,7 +16,18 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, RefreshCw, Search, TrendingUp, TrendingDown, Target, Hash, X, Sparkles, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { SuggestKeywordsModal } from "@/components/dashboard/SuggestKeywordsModal";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { subDays } from "date-fns";
+
+const STATUS_OPTIONS = [
+  { value: "monitoring", label: "Monitoring", className: "bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200" },
+  { value: "optimizing", label: "Optimizing", className: "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200" },
+  { value: "low_priority", label: "Low Priority", className: "bg-gray-100 text-gray-500 hover:bg-gray-200 border-gray-200" },
+] as const;
+
+function getStatusStyle(status: string) {
+  return STATUS_OPTIONS.find((s) => s.value === status) ?? STATUS_OPTIONS[0];
+}
 
 interface KeywordsTabProps {
   client: Tables<"clients">;
@@ -293,6 +304,11 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
     queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
   };
 
+  const handleStatusChange = async (keywordId: string, newStatus: string) => {
+    await supabase.from("keywords").update({ status: newStatus } as any).eq("id", keywordId);
+    queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] });
+  };
+
   const handleSuggest = async () => {
     setSuggestOpen(true);
     setSuggesting(true);
@@ -409,6 +425,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
                 <TableHead className="cursor-pointer select-none" onClick={() => handleSort("keyword")}>
                   <span className="flex items-center">Keyword <SortIcon col="keyword" /></span>
                 </TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="cursor-pointer select-none" onClick={() => handleSort("landing_page")}>
                   <span className="flex items-center">Landing Page <SortIcon col="landing_page" /></span>
                 </TableHead>
@@ -442,6 +459,27 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
                 return (
                   <TableRow key={`${row.keyword.id}-${row.city.id}-${i}`}>
                     <TableCell className="font-medium">{row.keyword.keyword}</TableCell>
+                    <TableCell>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border cursor-pointer transition-colors ${getStatusStyle((row.keyword as any).status ?? "monitoring").className}`}>
+                            {getStatusStyle((row.keyword as any).status ?? "monitoring").label}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-36 p-1" align="start">
+                          {STATUS_OPTIONS.map((opt) => (
+                            <button
+                              key={opt.value}
+                              className="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-muted flex items-center gap-2"
+                              onClick={() => handleStatusChange(row.keyword.id, opt.value)}
+                            >
+                              <span className={`inline-block w-2 h-2 rounded-full ${opt.value === "monitoring" ? "bg-blue-500" : opt.value === "optimizing" ? "bg-emerald-500" : "bg-gray-400"}`} />
+                              {opt.label}
+                            </button>
+                          ))}
+                        </PopoverContent>
+                      </Popover>
+                    </TableCell>
                     <TableCell className="text-xs text-muted-foreground max-w-[140px] truncate">
                       {row.keyword.target_url ?? "—"}
                     </TableCell>
