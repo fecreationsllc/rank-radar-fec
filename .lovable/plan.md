@@ -1,64 +1,41 @@
 
 
-# Integrate Google Search Console (GSC) Data
+# Set up weekly automatic ranking sync
 
-## Overview
-Connect your single Google account to pull GSC data (top queries, clicks, impressions, CTR, avg position) per client domain. This data appears in a new "Search Console" tab and enriches keyword suggestions.
+## Problem
+There is no scheduled job — `pg_cron` and `pg_net` extensions are not enabled. Rankings only update when you manually trigger "Sync Now."
 
-## How it works
+## Plan
 
-Since there's no built-in GSC connector, we need Google OAuth with the `webmasters.readonly` scope. You'll create a Google OAuth app once, and the tool stores the refresh token to keep pulling data.
+### 1. Enable `pg_cron` and `pg_net` extensions
+Database migration to enable both extensions needed for scheduled HTTP calls.
 
-## Changes
+### 2. Create weekly cron job
+Schedule `sync-rankings` to run every Monday at 6:00 AM UTC via `cron.schedule()` calling `net.http_post()` to the edge function endpoint.
 
-### 1. Google OAuth setup (one-time, per agency)
-- Store `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` as secrets
-- New edge function `gsc-auth` handles the OAuth flow (authorization URL + token exchange)
-- Store the refresh token in a new `gsc_connections` table
-- A small "Connect Google" button in Settings initiates the flow
+### 3. No code changes needed
+The `sync-rankings` edge function already works — it just needs to be triggered automatically.
 
-### 2. New database tables
+### Technical detail
+```sql
+-- Enable extensions
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
+CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
 
-**`gsc_connections`** — stores OAuth credentials per agency (single row since single account)
-- `id`, `access_token`, `refresh_token`, `token_expires_at`, `created_at`
+-- Schedule weekly sync (inserted via read query tool, not migration, since it contains project-specific URLs)
+SELECT cron.schedule(
+  'weekly-sync-rankings',
+  '0 6 * * 1',  -- Every Monday 6 AM UTC
+  $$
+  SELECT net.http_post(
+    url:='https://efjipsvuymqnvgyqqycx.supabase.co/functions/v1/sync-rankings',
+    headers:='{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmamlwc3Z1eW1xbnZneXFxeWN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5NDI4NzgsImV4cCI6MjA5MTUxODg3OH0.fIqB2Fb-6drAXAHlk83jwx4S1HZs9-RqnoFdu9meJB8"}'::jsonb,
+    body:='{}'::jsonb
+  ) AS request_id;
+  $$
+);
+```
 
-**`gsc_query_data`** — cached GSC query performance data per client
-- `id`, `client_id`, `query`, `clicks`, `impressions`, `ctr`, `position`, `date`, `fetched_at`
-
-### 3. New edge function: `fetch-gsc-data`
-- Accepts `{ client_id }`
-- Reads the client's domain, refreshes the OAuth token if needed
-- Calls GSC Search Analytics API (`searchAnalytics/query`) for the last 28 days
-- Groups by query, stores top queries in `gsc_query_data`
-- Logs cost as $0.00 (GSC API is free)
-
-### 4. New tab: "Search Console" in ClientDashboard
-- Summary cards: total clicks, total impressions, avg CTR, avg position (from GSC)
-- Table of top queries sorted by impressions, showing clicks, impressions, CTR, position
-- Highlight queries that aren't in the tracked keywords list (opportunity indicator)
-- "Sync GSC" button to pull fresh data
-- If not connected yet, show a "Connect Google Search Console" prompt
-
-### 5. Settings update
-- Add a "Google Search Console" card in Settings tab
-- Shows connection status (connected/not connected)
-- "Connect" button triggers OAuth flow
-- "Disconnect" button to remove credentials
-
-### 6. Feed GSC into keyword suggestions
-- Update `suggest-more-keywords` edge function to include top GSC queries (not yet tracked) as context for the AI, so suggestions are informed by real search data
-
-### Files to create/edit
-1. **Migration** — `gsc_connections` + `gsc_query_data` tables with RLS
-2. **`supabase/functions/gsc-auth/index.ts`** — OAuth flow (auth URL + token exchange)
-3. **`supabase/functions/fetch-gsc-data/index.ts`** — Pull GSC data for a client
-4. **`src/components/dashboard/SearchConsoleTab.tsx`** — New tab UI
-5. **`src/components/dashboard/ClientDashboard.tsx`** — Add Search Console tab
-6. **`src/components/dashboard/SettingsTab.tsx`** — Add GSC connection card
-7. **`supabase/functions/suggest-more-keywords/index.ts`** — Include GSC queries as context
-
-### Setup required from you
-- Create a Google Cloud project with Search Console API enabled
-- Create OAuth 2.0 credentials (Web application type)
-- Provide `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` — I'll prompt you to add these as secrets
+### Note on null positions
+The last sync ran successfully but your domain wasn't found in the top 100 for those keywords. This is expected if the site is new or doesn't rank for those terms yet — not a bug.
 
