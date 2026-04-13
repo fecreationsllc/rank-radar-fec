@@ -53,63 +53,38 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
     },
   });
 
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("fetch-gsc-data", {
-        body: { client_id: client.id },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast({ title: "GSC data synced", description: `${data.queries} query rows fetched` });
-      refetch();
-    } catch (e: any) {
-      toast({ title: "Sync failed", description: e.message, variant: "destructive" });
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  if (!connectionStatus?.connected) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <Target className="h-12 w-12 text-muted-foreground mb-4" />
-        <h2 className="text-lg font-semibold mb-2">Google Search Console not connected</h2>
-        <p className="text-sm text-muted-foreground mb-4 max-w-md">
-          Connect your Google account in the Settings tab to pull search performance data for this client.
-        </p>
-      </div>
-    );
-  }
-
   // Aggregate stats across all dates
-  const queryMap = new Map<string, { clicks: number; impressions: number; ctrSum: number; posSum: number; count: number }>();
-  for (const row of gscData) {
-    const existing = queryMap.get(row.query) ?? { clicks: 0, impressions: 0, ctrSum: 0, posSum: 0, count: 0 };
-    existing.clicks += row.clicks ?? 0;
-    existing.impressions += row.impressions ?? 0;
-    existing.ctrSum += Number(row.ctr ?? 0);
-    existing.posSum += Number(row.position ?? 0);
-    existing.count += 1;
-    queryMap.set(row.query, existing);
-  }
+  const aggregated = useMemo(() => {
+    const queryMap = new Map<string, { clicks: number; impressions: number; ctrSum: number; posSum: number; count: number }>();
+    for (const row of gscData) {
+      const existing = queryMap.get(row.query) ?? { clicks: 0, impressions: 0, ctrSum: 0, posSum: 0, count: 0 };
+      existing.clicks += row.clicks ?? 0;
+      existing.impressions += row.impressions ?? 0;
+      existing.ctrSum += Number(row.ctr ?? 0);
+      existing.posSum += Number(row.position ?? 0);
+      existing.count += 1;
+      queryMap.set(row.query, existing);
+    }
+    return Array.from(queryMap.entries())
+      .map(([query, stats]) => ({
+        query,
+        clicks: stats.clicks,
+        impressions: stats.impressions,
+        ctr: stats.count > 0 ? stats.ctrSum / stats.count : 0,
+        position: stats.count > 0 ? stats.posSum / stats.count : 0,
+        isTracked: trackedKeywords.includes(query.toLowerCase()),
+      }))
+      .sort((a, b) => b.impressions - a.impressions);
+  }, [gscData, trackedKeywords]);
 
-  const aggregated = Array.from(queryMap.entries())
-    .map(([query, stats]) => ({
-      query,
-      clicks: stats.clicks,
-      impressions: stats.impressions,
-      ctr: stats.count > 0 ? stats.ctrSum / stats.count : 0,
-      position: stats.count > 0 ? stats.posSum / stats.count : 0,
-      isTracked: trackedKeywords.includes(query.toLowerCase()),
-    }))
-    .sort((a, b) => b.impressions - a.impressions);
-
-  const totalClicks = aggregated.reduce((s, q) => s + q.clicks, 0);
-  const totalImpressions = aggregated.reduce((s, q) => s + q.impressions, 0);
-  const avgCtr = aggregated.length > 0 ? aggregated.reduce((s, q) => s + q.ctr, 0) / aggregated.length : 0;
-  const avgPosition = aggregated.length > 0 ? aggregated.reduce((s, q) => s + q.position, 0) / aggregated.length : 0;
-  const untrackedCount = aggregated.filter((q) => !q.isTracked).length;
+  const { totalClicks, totalImpressions, avgCtr, avgPosition, untrackedCount } = useMemo(() => {
+    const totalClicks = aggregated.reduce((s, q) => s + q.clicks, 0);
+    const totalImpressions = aggregated.reduce((s, q) => s + q.impressions, 0);
+    const avgCtr = aggregated.length > 0 ? aggregated.reduce((s, q) => s + q.ctr, 0) / aggregated.length : 0;
+    const avgPosition = aggregated.length > 0 ? aggregated.reduce((s, q) => s + q.position, 0) / aggregated.length : 0;
+    const untrackedCount = aggregated.filter((q) => !q.isTracked).length;
+    return { totalClicks, totalImpressions, avgCtr, avgPosition, untrackedCount };
+  }, [aggregated]);
 
   const handleSort = (col: SortColumn) => {
     if (sortColumn === col) {
@@ -143,6 +118,35 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
     });
     return arr;
   }, [aggregated, sortColumn, sortDirection]);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-gsc-data", {
+        body: { client_id: client.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({ title: "GSC data synced", description: `${data.queries} query rows fetched` });
+      refetch();
+    } catch (e: any) {
+      toast({ title: "Sync failed", description: e.message, variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  if (!connectionStatus?.connected) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <Target className="h-12 w-12 text-muted-foreground mb-4" />
+        <h2 className="text-lg font-semibold mb-2">Google Search Console not connected</h2>
+        <p className="text-sm text-muted-foreground mb-4 max-w-md">
+          Connect your Google account in the Settings tab to pull search performance data for this client.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
