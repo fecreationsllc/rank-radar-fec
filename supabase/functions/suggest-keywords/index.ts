@@ -180,6 +180,20 @@ serve(async (req) => {
     if (!toolCall) throw new Error("No tool call in response");
 
     const parsed = JSON.parse(toolCall.function.arguments);
+
+    // Log AI cost (~$0.001 per call) — no client_id available in this function
+    try {
+      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.49.4");
+      const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      await sb.from("api_usage_log").insert({
+        function_name: "suggest-keywords",
+        api_provider: "lovable_ai",
+        endpoint: "v1/chat/completions",
+        task_count: 1,
+        cost_usd: 0.001,
+      });
+    } catch { /* non-critical */ }
+
     return new Response(JSON.stringify({ keywords: parsed.keywords }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

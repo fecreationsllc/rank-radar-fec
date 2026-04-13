@@ -185,6 +185,16 @@ serve(async (req) => {
       kw => !existingList.includes(kw.toLowerCase())
     );
 
+    // Log AI cost
+    await sb.from("api_usage_log").insert({
+      client_id,
+      function_name: "suggest-more-keywords",
+      api_provider: "lovable_ai",
+      endpoint: "v1/chat/completions",
+      task_count: 1,
+      cost_usd: 0.001,
+    });
+
     return new Response(JSON.stringify({ keywords: filtered }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -5,6 +5,7 @@ import { KeywordsTab } from "@/components/dashboard/KeywordsTab";
 import { CompetitorsTab } from "@/components/dashboard/CompetitorsTab";
 import { SuggestionsTab } from "@/components/dashboard/SuggestionsTab";
 import { SettingsTab } from "@/components/dashboard/SettingsTab";
+import { CostsTab } from "@/components/dashboard/CostsTab";
 
 interface ClientDashboardProps {
   client: Tables<"clients">;
@@ -27,6 +28,7 @@ export function ClientDashboard({ client, refetchClients }: ClientDashboardProps
             <TabsTrigger value="keywords">Keywords</TabsTrigger>
             <TabsTrigger value="competitors">Competitors</TabsTrigger>
             <TabsTrigger value="suggestions">Suggestions</TabsTrigger>
+            <TabsTrigger value="costs">Costs</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
         </Tabs>
@@ -37,6 +39,7 @@ export function ClientDashboard({ client, refetchClients }: ClientDashboardProps
         {activeTab === "keywords" && <KeywordsTab client={client} />}
         {activeTab === "competitors" && <CompetitorsTab client={client} />}
         {activeTab === "suggestions" && <SuggestionsTab client={client} />}
+        {activeTab === "costs" && <CostsTab client={client} />}
         {activeTab === "settings" && <SettingsTab client={client} refetchClients={refetchClients} />}
       </div>
     </div>

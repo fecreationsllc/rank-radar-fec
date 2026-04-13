@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_usage_log: {
+        Row: {
+          api_provider: string
+          client_id: string | null
+          cost_usd: number
+          created_at: string | null
+          endpoint: string | null
+          function_name: string
+          id: string
+          task_count: number | null
+        }
+        Insert: {
+          api_provider: string
+          client_id?: string | null
+          cost_usd: number
+          created_at?: string | null
+          endpoint?: string | null
+          function_name: string
+          id?: string
+          task_count?: number | null
+        }
+        Update: {
+          api_provider?: string
+          client_id?: string | null
+          cost_usd?: number
+          created_at?: string | null
+          endpoint?: string | null
+          function_name?: string
+          id?: string
+          task_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_usage_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_cities: {
         Row: {
           city_name: string

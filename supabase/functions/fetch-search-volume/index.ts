@@ -83,6 +83,21 @@ serve(async (req) => {
       }
     }
 
+    // Log DataForSEO search volume cost: $0.05 per request batch
+    const batchCount = cities.reduce((acc, _city) => {
+      return acc + Math.ceil(keywords.length / 700);
+    }, 0);
+    if (batchCount > 0) {
+      await supabase.from("api_usage_log").insert({
+        client_id,
+        function_name: "fetch-search-volume",
+        api_provider: "dataforseo",
+        endpoint: "keywords_data/google_ads/search_volume/live",
+        task_count: batchCount,
+        cost_usd: batchCount * 0.05,
+      });
+    }
+
     // Upsert into keyword_search_volume
     if (upserts.length > 0) {
       const { error } = await supabase

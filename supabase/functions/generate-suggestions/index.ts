@@ -135,6 +135,16 @@ Respond ONLY with valid JSON, no markdown fences:
       suggestions = match ? JSON.parse(match[0]) : { suggestions: [] };
     }
 
+    // Log AI cost
+    await supabase.from("api_usage_log").insert({
+      client_id,
+      function_name: "generate-suggestions",
+      api_provider: "anthropic",
+      endpoint: "v1/messages",
+      task_count: 1,
+      cost_usd: 0.003,
+    });
+
     // Upsert into seo_suggestions
     await supabase.from("seo_suggestions").insert({
       client_id,
