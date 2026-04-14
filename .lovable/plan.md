@@ -1,33 +1,48 @@
 
-
-# Rewrite discover-competitors to Use Real SERP Data
-
 ## Summary
-Replace Anthropic AI competitor discovery with actual DataForSEO SERP lookups. Query Google for the client's top GSC keywords and extract real competing domains from the organic results.
+I inspected the codebase and backend records first. The checked-in `supabase/functions/discover-competitors/index.ts` already shows a DataForSEO SERP-based implementation, and recent usage records for `discover-competitors` are already logging `dataforseo` against `serp/google/organic/live`. Anthropic references currently appear in `generate-suggestions`, not in `discover-competitors`. So this looks like a stale/deployed-version mismatch or a need to hard-refresh the function implementation rather than a brand new design.
 
-## Changes (single file: `supabase/functions/discover-competitors/index.ts`)
+## Plan
+1. **Hard-rewrite `supabase/functions/discover-competitors/index.ts` to the exact SERP-only flow**
+   - Remove any remaining Anthropic-specific code paths if present in the deployed function:
+     - `ANTHROPIC_API_KEY`
+     - Anthropic fetch call
+     - AI JSON parsing
+     - Anthropic usage logging
+   - Keep the existing service-role client and CORS handling.
 
-### Full rewrite logic:
+2. **Implement the real competitor discovery flow**
+   - Fetch the client and its primary city.
+   - Fetch GSC rows for the client, aggregate by `query`, sum `impressions`, sort descending, and take the top 5 queries.
+   - For each query, call DataForSEO `serp/google/organic/live` with Basic auth from `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD`.
+   - Extract domains from organic results only, normalize them, and count appearances across SERPs with a `Map<string, number>`.
 
-1. **Get client + primary city** — same as current code
+3. **Filter and persist competitors**
+   - Exclude:
+     - the client’s own domain
+     - the blocklisted domains you listed
+     - any domain containing `"yelp"` or `"google"`
+   - Sort by frequency descending, take the top 6, and upsert:
+     - `client_id`
+     - `domain`
+     - `is_auto_discovered: true`
+     - `is_tracked: true`
 
-2. **Get search queries to use** — Query `gsc_query_data` for this client, aggregate by query (sum impressions), sort desc, take top 5. If no GSC data, fall back to `keywords` table sorted by `latest_position` ASC (best-ranked first), limit 5, using the `keyword` field.
+4. **Keep logging aligned with DataForSEO**
+   - Insert into `api_usage_log` with:
+     - `api_provider: "dataforseo"`
+     - `endpoint: "serp/google/organic/live"`
+     - `task_count`: number of SERP calls made
+     - `cost_usd: 0.002 * taskCount`
 
-3. **SERP lookups** — For each query, call DataForSEO `POST https://api.dataforseo.com/v3/serp/google/organic/live` with `[{ keyword, location_code, language_code: "en", depth: 20 }]`. Use `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` from env (Basic auth).
+5. **Leave the UI untouched**
+   - `CompetitorsTab.tsx` already has the 6-competitor limit and still calls the same function.
+   - `AddClientModal.tsx` also already invokes `discover-competitors`, so no caller changes are needed.
 
-4. **Extract domains** — From each response at `tasks[0].result[0].items`, filter for `type === "organic"`, extract `item.domain`.
-
-5. **Build frequency map** — Count how many of the 5 SERPs each domain appears in.
-
-6. **Filter blocklist** — Remove client's own domain and blocklisted domains: yelp.com, yellowpages.com, homeadvisor.com, angi.com, thumbtack.com, bbb.org, google.com, facebook.com, instagram.com, twitter.com, linkedin.com, pinterest.com, youtube.com, amazon.com, wikipedia.org, reddit.com, nextdoor.com, mapquest.com, apple.com, plus any domain containing "yelp" or "google".
-
-7. **Sort by frequency desc, take top 6** — Upsert into `competitors` with `is_auto_discovered: true, is_tracked: true`.
-
-8. **Log usage** — provider "dataforseo", endpoint "serp/google/organic/live", task_count = number of SERP calls made, cost_usd = 0.002 × task_count.
-
-### Key technical notes
-- DataForSEO auth: Basic auth with `btoa(LOGIN:PASSWORD)`
-- `gsc_query_data` may have multiple rows per query (different dates) — aggregate with a Map, sum impressions
-- The `keywords` table doesn't have a `latest_position` column per the schema — fallback will just take first 5 keywords ordered by `created_at` ASC (longest-tracked)
-- No changes to CompetitorsTab.tsx
-
+## Technical details
+- **File to update:** `supabase/functions/discover-competitors/index.ts`
+- **No database changes needed**
+- **Validation after implementation:**
+  - confirm no Anthropic code remains in `discover-competitors`
+  - confirm new runs log only `dataforseo` usage for this function
+  - confirm returned competitors come from real SERP domains rather than AI-generated output
