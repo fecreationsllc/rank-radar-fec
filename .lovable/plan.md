@@ -1,43 +1,30 @@
 
 
-# Import Ranked Keywords Feature
+# Refactor ImportRankedKeywordsModal to Use GSC Data
 
 ## Summary
-Add an "Import Ranked Keywords" button to the Keywords tab that fetches the client's currently-ranking keywords from DataForSEO and lets the user select which ones to add to tracking.
+Replace the DataForSEO edge function call with a direct query to `gsc_query_data` table, showing GSC queries with position and impressions instead of search volume.
 
-## New Files
+## Changes (single file: `src/components/dashboard/ImportRankedKeywordsModal.tsx`)
 
-### 1. Edge function: `supabase/functions/get-ranked-keywords/index.ts`
-- Accept POST with `{ domain, location_code }` 
-- Call DataForSEO Labs `ranked_keywords/live` endpoint with basic auth (DATAFORSEO_LOGIN/PASSWORD)
-- Body: `[{ target: domain, location_code, language_code: "en", limit: 100, filters: ["ranked_serp_element.serp_item.rank_absolute","<=",100] }]`
-- Parse response, extract keyword, position (`rank_absolute`), and search volume (`keyword_data.keyword_info.search_volume`)
-- Return sorted by search volume descending
-- Include CORS headers
+1. **Update `RankedKeyword` interface** — Replace `volume: number` with `impressions: number`
 
-### 2. Modal: `src/components/dashboard/ImportRankedKeywordsModal.tsx`
-- Styled like SuggestKeywordsModal but wider (max-w-lg) to fit position column
-- Props: `open, onOpenChange, clientId, clientDomain, onImported`
-- On open, fetches client's primary city location_code, then calls edge function
-- **Search input** at top to filter keywords by text
-- **Select All** checkbox (applies to visible filtered, non-tracked keywords only)
-- Each row: checkbox | keyword text | PositionBadge (colored) | volume/mo
-- Already-tracked keywords: greyed out row, disabled checkbox, "Already tracked" label instead of checkbox
-- Tracks which keywords are already in the keywords table by querying existing keywords for this client
-- **"Add Selected to Tracking"** button in footer with count
-- On add: insert into `keywords` table (same pattern as AddKeywordsModal — `client_id + keyword`), trigger `sync-rankings` and `fetch-search-volume`, invalidate queries, show toast, close modal
+2. **Replace `fetchData` logic** — Remove the `supabase.functions.invoke("get-ranked-keywords", ...)` call. Instead query `gsc_query_data` directly:
+   - `supabase.from("gsc_query_data").select("*").eq("client_id", clientId).order("impressions", { ascending: false })`
+   - Aggregate duplicate queries (same query text across dates): take max impressions, average position rounded to nearest int
+   - Map to `{ keyword: row.query, position: Math.round(avgPosition), impressions: totalImpressions }`
 
-## Modified Files
+3. **Update display** — Change volume column header/values from `{volume.toLocaleString()}/mo` to `{impressions.toLocaleString()}` with header "Impr."
 
-### 3. `src/components/dashboard/KeywordsTab.tsx`
-- Import `ImportRankedKeywordsModal` and `Download` (or `Import`) icon from lucide
-- Add `importOpen` state
-- Add "Import Ranked Keywords" button in toolbar (next to "Add Keywords")
-- Render `ImportRankedKeywordsModal` at bottom with appropriate props
+4. **Update empty state message** — Change from "No ranked keywords found for this domain." to "No GSC data available. Sync Google Search Console from the Search Console tab first."
 
-## Technical Details
-- Edge function uses `Deno.env.get("DATAFORSEO_LOGIN")` and `DATAFORSEO_PASSWORD`
-- DataForSEO response path: `result[0].items[].keyword_data.keyword`, `.keyword_data.keyword_info.search_volume`, `.ranked_serp_element.serp_item.rank_absolute`
-- Already-tracked detection: fetch existing keywords for client_id client-side and compare
-- Insert pattern matches AddKeywordsModal (no cross-join with cities needed since AddKeywordsModal doesn't do that either — just `client_id + keyword`)
+5. **Remove `clientDomain` usage** — No longer needed since we query by `clientId` directly. Remove from props interface and the loading message. Also remove the primary city lookup since location_code is no longer needed.
+
+6. **Update modal title/icon** — Keep as-is or minor text tweak to reflect GSC source.
+
+## Props change
+- Remove `clientDomain` from `ImportRankedKeywordsModalProps` (no longer needed)
+- Update `KeywordsTab.tsx` to stop passing `clientDomain`
+
+## No database or edge function changes needed
 
