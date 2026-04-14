@@ -30,6 +30,21 @@ const BLOCKLIST = new Set([
   "x.com",
   "manta.com",
   "angieslist.com",
+  "homedepot.com",
+  "lowes.com",
+  "walmart.com",
+  "costco.com",
+  "target.com",
+  "bestbuy.com",
+  "wayfair.com",
+  "overstock.com",
+  "ikea.com",
+  "flooranddecor.com",
+  "builddirect.com",
+  "houzz.com",
+  "samsclub.com",
+  "menards.com",
+  "acehardware.com",
 ]);
 
 function isBlocked(domain: string): boolean {
@@ -122,10 +137,6 @@ serve(async (req) => {
     // SERP lookups via DataForSEO
     const frequencyMap = new Map<string, number>();
     let taskCount = 0;
-    const serpErrors: string[] = [];
-    let firstSerpRawResponse: any = null;
-    let firstSerpItemCount: number = 0;
-    let firstSerpStatus: number | null = null;
 
     for (const keyword of searchQueries) {
       try {
@@ -152,11 +163,6 @@ serve(async (req) => {
         const serpData = await serpRes.json();
         const items = serpData?.tasks?.[0]?.result?.[0]?.items || [];
 
-        if (taskCount === 1) {
-          firstSerpRawResponse = serpData;
-          firstSerpItemCount = items.length;
-          firstSerpStatus = serpData?.status_code ?? null;
-        }
 
         for (const item of items) {
           if (item.type !== "organic" || !item.domain) continue;
@@ -171,7 +177,7 @@ serve(async (req) => {
         }
       } catch (e) {
         console.error(`SERP lookup failed for "${keyword}":`, e);
-        serpErrors.push(`SERP failed for "${keyword}": ${(e as Error).message}`);
+        
       }
     }
 
@@ -211,20 +217,7 @@ serve(async (req) => {
       .select("*")
       .eq("client_id", client_id);
 
-    return new Response(JSON.stringify({
-      competitors: allCompetitors,
-      debug: {
-        gscRowCount: gscRows?.length || 0,
-        searchQueries,
-        locationCode: primaryCity.location_code,
-        taskCount,
-        uniqueDomainsFound: frequencyMap.size,
-        serpErrors,
-        firstSerpRawResponse,
-        firstSerpItemCount,
-        firstSerpStatus,
-      },
-    }), {
+    return new Response(JSON.stringify({ competitors: allCompetitors }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
