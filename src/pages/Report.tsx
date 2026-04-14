@@ -18,6 +18,10 @@ const STATUS_OPTIONS = [
   { value: "low_priority", label: "Low Priority", className: "bg-gray-100 text-gray-500 border-gray-200" },
 ] as const;
 
+function formatCityName(name: string) {
+  return name.replace(/,(?!\s)/g, ", ");
+}
+
 function getStatusStyle(status: string) {
   return STATUS_OPTIONS.find((s) => s.value === status) ?? STATUS_OPTIONS[0];
 }
@@ -95,7 +99,7 @@ export default function Report() {
 
       return {
         client,
-        cities: cities.map((c) => c.city_name),
+        cities: cities.map((c) => formatCityName(c.city_name)),
         rows,
         suggestions: parsedSuggestions,
         suggestionsDate: suggestions?.generated_at,
