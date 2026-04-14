@@ -215,6 +215,7 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
             <Table>
               <TableHeader>
                <TableRow>
+                  <TableHead className="w-10"></TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort("query")}>
                     <span className="inline-flex items-center">Query<SortIcon col="query" /></span>
                   </TableHead>
@@ -238,6 +239,14 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
               <TableBody>
                 {sortedData.slice(0, 50).map((q) => (
                   <TableRow key={q.query}>
+                    <TableCell>
+                      {!q.isTracked && (
+                        <Checkbox
+                          checked={selectedQueries.has(q.query)}
+                          onCheckedChange={() => toggleQuery(q.query)}
+                        />
+                      )}
+                    </TableCell>
                     <TableCell className="font-medium">{q.query}</TableCell>
                     <TableCell className="text-right">{q.clicks.toLocaleString()}</TableCell>
                     <TableCell className="text-right">{q.impressions.toLocaleString()}</TableCell>
