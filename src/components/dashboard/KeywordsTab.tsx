@@ -543,7 +543,6 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
         open={importOpen}
         onOpenChange={setImportOpen}
         clientId={client.id}
-        clientDomain={client.domain}
         onImported={() => queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] })}
       />
     </div>
