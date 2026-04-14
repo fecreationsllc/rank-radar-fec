@@ -22,6 +22,16 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
   const [syncing, setSyncing] = useState(false);
   const [sortColumn, setSortColumn] = useState<SortColumn>("impressions");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [selectedQueries, setSelectedQueries] = useState<Set<string>>(new Set());
+
+  const toggleQuery = (query: string) => {
+    setSelectedQueries((prev) => {
+      const next = new Set(prev);
+      if (next.has(query)) next.delete(query);
+      else next.add(query);
+      return next;
+    });
+  };
 
   const { data: connectionStatus } = useQuery({
     queryKey: ["gsc-status"],
