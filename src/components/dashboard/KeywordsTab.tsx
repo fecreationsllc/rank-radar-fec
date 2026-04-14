@@ -51,6 +51,7 @@ type SortDirection = "asc" | "desc";
 export function KeywordsTab({ client }: KeywordsTabProps) {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
@@ -372,6 +373,9 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
         <Button onClick={() => setAddOpen(true)}>
           <Plus className="h-4 w-4 mr-1" /> Add Keywords
         </Button>
+        <Button variant="secondary" onClick={() => setImportOpen(true)}>
+          <Download className="h-4 w-4 mr-1" /> Import Ranked
+        </Button>
         <Button variant="secondary" onClick={handleSuggest} disabled={suggesting || keywordRows.length === 0}>
           <Sparkles className="h-4 w-4 mr-1" /> Suggest More
         </Button>
@@ -533,6 +537,14 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
         keywords={suggestedKeywords}
         loading={suggesting}
         onAdd={handleAddSuggested}
+      />
+
+      <ImportRankedKeywordsModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        clientId={client.id}
+        clientDomain={client.domain}
+        onImported={() => queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] })}
       />
     </div>
   );
