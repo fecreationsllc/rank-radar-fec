@@ -13,8 +13,9 @@ import { AddKeywordsModal } from "@/components/dashboard/AddKeywordsModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, RefreshCw, Search, TrendingUp, TrendingDown, Target, Hash, X, Sparkles, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Plus, RefreshCw, Search, TrendingUp, TrendingDown, Target, Hash, X, Sparkles, ArrowUp, ArrowDown, ArrowUpDown, Download } from "lucide-react";
 import { SuggestKeywordsModal } from "@/components/dashboard/SuggestKeywordsModal";
+import { ImportRankedKeywordsModal } from "@/components/dashboard/ImportRankedKeywordsModal";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { subDays } from "date-fns";
@@ -50,6 +51,7 @@ type SortDirection = "asc" | "desc";
 export function KeywordsTab({ client }: KeywordsTabProps) {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
@@ -371,6 +373,9 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
         <Button onClick={() => setAddOpen(true)}>
           <Plus className="h-4 w-4 mr-1" /> Add Keywords
         </Button>
+        <Button variant="secondary" onClick={() => setImportOpen(true)}>
+          <Download className="h-4 w-4 mr-1" /> Import Ranked
+        </Button>
         <Button variant="secondary" onClick={handleSuggest} disabled={suggesting || keywordRows.length === 0}>
           <Sparkles className="h-4 w-4 mr-1" /> Suggest More
         </Button>
@@ -532,6 +537,14 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
         keywords={suggestedKeywords}
         loading={suggesting}
         onAdd={handleAddSuggested}
+      />
+
+      <ImportRankedKeywordsModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        clientId={client.id}
+        clientDomain={client.domain}
+        onImported={() => queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks", client.id] })}
       />
     </div>
   );
