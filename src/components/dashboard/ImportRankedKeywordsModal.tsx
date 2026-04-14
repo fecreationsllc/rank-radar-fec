@@ -12,18 +12,17 @@ import { Loader2, Download, Search } from "lucide-react";
 interface RankedKeyword {
   keyword: string;
   position: number | null;
-  volume: number;
+  impressions: number;
 }
 
 interface ImportRankedKeywordsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   clientId: string;
-  clientDomain: string;
   onImported: () => void;
 }
 
-export function ImportRankedKeywordsModal({ open, onOpenChange, clientId, clientDomain, onImported }: ImportRankedKeywordsModalProps) {
+export function ImportRankedKeywordsModal({ open, onOpenChange, clientId, onImported }: ImportRankedKeywordsModalProps) {
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
   const [keywords, setKeywords] = useState<RankedKeyword[]>([]);
@@ -44,30 +43,50 @@ export function ImportRankedKeywordsModal({ open, onOpenChange, clientId, client
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch tracked keywords and primary city in parallel
-      const [kwRes, cityRes] = await Promise.all([
+      // Fetch tracked keywords and GSC data in parallel
+      const [kwRes, gscRes] = await Promise.all([
         supabase.from("keywords").select("keyword").eq("client_id", clientId),
-        supabase.from("client_cities").select("location_code, is_primary").eq("client_id", clientId),
+        supabase.from("gsc_query_data").select("*").eq("client_id", clientId).order("impressions", { ascending: false }),
       ]);
 
       const tracked = new Set((kwRes.data ?? []).map(k => k.keyword.toLowerCase()));
       setTrackedSet(tracked);
 
-      const primaryCity = (cityRes.data ?? []).find(c => c.is_primary) ?? cityRes.data?.[0];
-      if (!primaryCity) {
-        toast({ title: "No city configured", description: "Add a city to this client first.", variant: "destructive" });
-        setLoading(false);
-        return;
+      const gscRows = gscRes.data ?? [];
+
+      // Aggregate duplicate queries across dates
+      const queryMap = new Map<string, { totalImpressions: number; positionSum: number; count: number }>();
+      for (const row of gscRows) {
+        const key = row.query.toLowerCase();
+        const existing = queryMap.get(key);
+        if (existing) {
+          existing.totalImpressions = Math.max(existing.totalImpressions, row.impressions ?? 0);
+          existing.positionSum += row.position ?? 0;
+          existing.count += 1;
+        } else {
+          queryMap.set(key, {
+            totalImpressions: row.impressions ?? 0,
+            positionSum: row.position ?? 0,
+            count: 1,
+          });
+        }
       }
 
-      const { data, error } = await supabase.functions.invoke("get-ranked-keywords", {
-        body: { domain: clientDomain, location_code: primaryCity.location_code },
-      });
+      // Build deduplicated keyword list, keep original casing from first occurrence
+      const caseMap = new Map<string, string>();
+      for (const row of gscRows) {
+        const key = row.query.toLowerCase();
+        if (!caseMap.has(key)) caseMap.set(key, row.query);
+      }
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      const fetched: RankedKeyword[] = Array.from(queryMap.entries())
+        .map(([key, agg]) => ({
+          keyword: caseMap.get(key) ?? key,
+          position: Math.round(agg.positionSum / agg.count),
+          impressions: agg.totalImpressions,
+        }))
+        .sort((a, b) => b.impressions - a.impressions);
 
-      const fetched: RankedKeyword[] = data?.keywords ?? [];
       setKeywords(fetched);
 
       // Pre-select untracked keywords
@@ -75,7 +94,7 @@ export function ImportRankedKeywordsModal({ open, onOpenChange, clientId, client
       setSelected(new Set(untracked));
     } catch (e) {
       console.error("Import ranked keywords error:", e);
-      toast({ title: "Failed to fetch ranked keywords", description: e instanceof Error ? e.message : "Please try again.", variant: "destructive" });
+      toast({ title: "Failed to fetch GSC data", description: e instanceof Error ? e.message : "Please try again.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -154,10 +173,10 @@ export function ImportRankedKeywordsModal({ open, onOpenChange, clientId, client
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Fetching ranked keywords for {clientDomain}…</p>
+            <p className="text-sm text-muted-foreground">Fetching GSC data…</p>
           </div>
         ) : keywords.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">No ranked keywords found for this domain.</p>
+          <p className="text-sm text-muted-foreground py-8 text-center">No GSC data available. Sync Google Search Console from the Search Console tab first.</p>
         ) : (
           <div className="space-y-3">
             <div className="relative">
@@ -178,7 +197,7 @@ export function ImportRankedKeywordsModal({ open, onOpenChange, clientId, client
             </div>
 
             <div className="max-h-80 overflow-y-auto space-y-1">
-              {filtered.map(({ keyword, position, volume }) => {
+              {filtered.map(({ keyword, position, impressions }) => {
                 const isTracked = trackedSet.has(keyword.toLowerCase());
                 return (
                   <label
@@ -195,7 +214,7 @@ export function ImportRankedKeywordsModal({ open, onOpenChange, clientId, client
                       <span className="text-xs text-muted-foreground italic">Already tracked</span>
                     )}
                     <PositionBadge position={position} />
-                    <span className="text-xs text-muted-foreground tabular-nums w-16 text-right">{volume.toLocaleString()}/mo</span>
+                    <span className="text-xs text-muted-foreground tabular-nums w-16 text-right">{impressions.toLocaleString()}</span>
                   </label>
                 );
               })}
