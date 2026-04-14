@@ -130,7 +130,7 @@ serve(async (req) => {
     for (const keyword of searchQueries) {
       try {
         const serpRes = await fetch(
-          "https://api.dataforseo.com/v3/serp/google/organic/live",
+          "https://api.dataforseo.com/v3/serp/google/organic/live/advanced",
           {
             method: "POST",
             headers: {
@@ -201,7 +201,7 @@ serve(async (req) => {
       client_id,
       function_name: "discover-competitors",
       api_provider: "dataforseo",
-      endpoint: "serp/google/organic/live",
+      endpoint: "serp/google/organic/live/advanced",
       task_count: taskCount,
       cost_usd: 0.002 * taskCount,
     });
