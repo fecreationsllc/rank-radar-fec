@@ -122,6 +122,7 @@ serve(async (req) => {
     // SERP lookups via DataForSEO
     const frequencyMap = new Map<string, number>();
     let taskCount = 0;
+    const serpErrors: string[] = [];
 
     for (const keyword of searchQueries) {
       try {
@@ -161,6 +162,7 @@ serve(async (req) => {
         }
       } catch (e) {
         console.error(`SERP lookup failed for "${keyword}":`, e);
+        serpErrors.push(`SERP failed for "${keyword}": ${(e as Error).message}`);
       }
     }
 
@@ -200,7 +202,17 @@ serve(async (req) => {
       .select("*")
       .eq("client_id", client_id);
 
-    return new Response(JSON.stringify({ competitors: allCompetitors }), {
+    return new Response(JSON.stringify({
+      competitors: allCompetitors,
+      debug: {
+        gscRowCount: gscRows?.length || 0,
+        searchQueries,
+        locationCode: primaryCity.location_code,
+        taskCount,
+        uniqueDomainsFound: frequencyMap.size,
+        serpErrors,
+      },
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
