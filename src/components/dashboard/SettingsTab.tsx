@@ -25,6 +25,13 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
   const [name, setName] = useState(client.name);
   const [domain, setDomain] = useState(client.domain);
   const [alertEmail, setAlertEmail] = useState(client.alert_email ?? "");
+
+  // Sync local state when client prop changes (e.g. switching clients)
+  useEffect(() => {
+    setName(client.name);
+    setDomain(client.domain);
+    setAlertEmail(client.alert_email ?? "");
+  }, [client.id]);
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
