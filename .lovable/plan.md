@@ -1,29 +1,33 @@
 
 
-# Rewrite discover-competitors to Use Anthropic AI + Enforce 6-Competitor Limit
+# Rewrite discover-competitors to Use Real SERP Data
 
 ## Summary
-Replace DataForSEO competitors_domain call with Anthropic Claude, feeding it the client's keywords and GSC data to suggest realistic local competitors. Enforce a max of 6 competitors in the UI.
+Replace Anthropic AI competitor discovery with actual DataForSEO SERP lookups. Query Google for the client's top GSC keywords and extract real competing domains from the organic results.
 
-## Changes
+## Changes (single file: `supabase/functions/discover-competitors/index.ts`)
 
-### 1. Rewrite `supabase/functions/discover-competitors/index.ts`
-- Remove all DataForSEO logic
-- After getting client + primary city, fetch:
-  - Keywords: `keywords` table where `client_id` matches, limit 30, select `keyword, status`
-  - GSC queries: `gsc_query_data` ordered by impressions desc, limit 30, select `query, impressions, position`
-- Call Anthropic Messages API (`https://api.anthropic.com/v1/messages`) with `ANTHROPIC_API_KEY`, model `claude-sonnet-4-20250514`, max_tokens 1024
-- Prompt includes: domain, city name, tracked keywords with statuses, top GSC queries with impressions — asks for JSON array of exactly 6 local competitor domains, explicitly excluding national brands/aggregators (yelp, homeadvisor, thumbtack, etc.)
-- Parse JSON from response content, filter out client's own domain, take up to 6
-- Map to `{ client_id, domain, is_auto_discovered: true, is_tracked: true }` and upsert with `onConflict: "client_id,domain"`
-- Log to `api_usage_log` with provider "anthropic", endpoint "messages", cost 0.003
+### Full rewrite logic:
 
-### 2. Update `src/components/dashboard/CompetitorsTab.tsx`
-- Compute `atLimit = competitors.length >= 6`
-- Wrap Auto-discover and Add Competitor buttons in `Tooltip` when `atLimit` — show "Maximum 6 competitors reached", buttons disabled
-- Import `Tooltip, TooltipContent, TooltipProvider, TooltipTrigger` from UI components
+1. **Get client + primary city** — same as current code
 
-## Files changed
-- `supabase/functions/discover-competitors/index.ts` — full rewrite
-- `src/components/dashboard/CompetitorsTab.tsx` — add 6-competitor limit enforcement
+2. **Get search queries to use** — Query `gsc_query_data` for this client, aggregate by query (sum impressions), sort desc, take top 5. If no GSC data, fall back to `keywords` table sorted by `latest_position` ASC (best-ranked first), limit 5, using the `keyword` field.
+
+3. **SERP lookups** — For each query, call DataForSEO `POST https://api.dataforseo.com/v3/serp/google/organic/live` with `[{ keyword, location_code, language_code: "en", depth: 20 }]`. Use `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD` from env (Basic auth).
+
+4. **Extract domains** — From each response at `tasks[0].result[0].items`, filter for `type === "organic"`, extract `item.domain`.
+
+5. **Build frequency map** — Count how many of the 5 SERPs each domain appears in.
+
+6. **Filter blocklist** — Remove client's own domain and blocklisted domains: yelp.com, yellowpages.com, homeadvisor.com, angi.com, thumbtack.com, bbb.org, google.com, facebook.com, instagram.com, twitter.com, linkedin.com, pinterest.com, youtube.com, amazon.com, wikipedia.org, reddit.com, nextdoor.com, mapquest.com, apple.com, plus any domain containing "yelp" or "google".
+
+7. **Sort by frequency desc, take top 6** — Upsert into `competitors` with `is_auto_discovered: true, is_tracked: true`.
+
+8. **Log usage** — provider "dataforseo", endpoint "serp/google/organic/live", task_count = number of SERP calls made, cost_usd = 0.002 × task_count.
+
+### Key technical notes
+- DataForSEO auth: Basic auth with `btoa(LOGIN:PASSWORD)`
+- `gsc_query_data` may have multiple rows per query (different dates) — aggregate with a Map, sum impressions
+- The `keywords` table doesn't have a `latest_position` column per the schema — fallback will just take first 5 keywords ordered by `created_at` ASC (longest-tracked)
+- No changes to CompetitorsTab.tsx
 
