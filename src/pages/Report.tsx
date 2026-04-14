@@ -99,7 +99,7 @@ export default function Report() {
 
       return {
         client,
-        cities: cities.map((c) => c.city_name),
+        cities: cities.map((c) => formatCityName(c.city_name)),
         rows,
         suggestions: parsedSuggestions,
         suggestionsDate: suggestions?.generated_at,
