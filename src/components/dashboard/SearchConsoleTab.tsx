@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, RefreshCw, MousePointerClick, Eye, Target, TrendingUp, Sparkles, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 
 type SortColumn = "query" | "clicks" | "impressions" | "ctr" | "position" | "status";
@@ -21,6 +22,16 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
   const [syncing, setSyncing] = useState(false);
   const [sortColumn, setSortColumn] = useState<SortColumn>("impressions");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [selectedQueries, setSelectedQueries] = useState<Set<string>>(new Set());
+
+  const toggleQuery = (query: string) => {
+    setSelectedQueries((prev) => {
+      const next = new Set(prev);
+      if (next.has(query)) next.delete(query);
+      else next.add(query);
+      return next;
+    });
+  };
 
   const { data: connectionStatus } = useQuery({
     queryKey: ["gsc-status"],
@@ -204,6 +215,7 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
             <Table>
               <TableHeader>
                <TableRow>
+                  <TableHead className="w-10"></TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort("query")}>
                     <span className="inline-flex items-center">Query<SortIcon col="query" /></span>
                   </TableHead>
@@ -227,6 +239,14 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
               <TableBody>
                 {sortedData.slice(0, 50).map((q) => (
                   <TableRow key={q.query}>
+                    <TableCell>
+                      {!q.isTracked && (
+                        <Checkbox
+                          checked={selectedQueries.has(q.query)}
+                          onCheckedChange={() => toggleQuery(q.query)}
+                        />
+                      )}
+                    </TableCell>
                     <TableCell className="font-medium">{q.query}</TableCell>
                     <TableCell className="text-right">{q.clicks.toLocaleString()}</TableCell>
                     <TableCell className="text-right">{q.impressions.toLocaleString()}</TableCell>
