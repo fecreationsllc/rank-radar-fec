@@ -6,6 +6,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const BLOCKLIST = new Set([
+  "yelp.com", "yellowpages.com", "homeadvisor.com", "angi.com", "thumbtack.com",
+  "bbb.org", "google.com", "facebook.com", "instagram.com", "twitter.com",
+  "linkedin.com", "pinterest.com", "youtube.com", "amazon.com", "wikipedia.org",
+  "reddit.com", "nextdoor.com", "mapquest.com", "apple.com", "x.com",
+  "manta.com", "angieslist.com",
+]);
+
+function isBlocked(domain: string): boolean {
+  if (BLOCKLIST.has(domain)) return true;
+  if (domain.includes("yelp") || domain.includes("google")) return true;
+  return false;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -18,93 +32,113 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
+    const DATAFORSEO_LOGIN = Deno.env.get("DATAFORSEO_LOGIN")!;
+    const DATAFORSEO_PASSWORD = Deno.env.get("DATAFORSEO_PASSWORD")!;
+    const authHeader = "Basic " + btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`);
 
-    // Get client
-    const { data: client } = await supabase.from("clients").select("*").eq("id", client_id).single();
-    if (!client) throw new Error("Client not found");
-
-    // Get primary city
-    const { data: cities } = await supabase.from("client_cities").select("*").eq("client_id", client_id).eq("is_primary", true).limit(1);
-    const primaryCity = cities?.[0];
-    if (!primaryCity) throw new Error("No primary city found");
-
-    // Fetch keywords and GSC data in parallel
-    const [keywordsRes, gscRes] = await Promise.all([
-      supabase.from("keywords").select("keyword, status").eq("client_id", client_id).limit(30),
-      supabase.from("gsc_query_data").select("query, impressions, position").eq("client_id", client_id).order("impressions", { ascending: false }).limit(30),
+    // Get client + primary city
+    const [clientRes, citiesRes] = await Promise.all([
+      supabase.from("clients").select("*").eq("id", client_id).single(),
+      supabase.from("client_cities").select("*").eq("client_id", client_id).eq("is_primary", true).limit(1),
     ]);
 
-    const keywords = keywordsRes.data ?? [];
-    const gscQueries = gscRes.data ?? [];
+    const client = clientRes.data;
+    if (!client) throw new Error("Client not found");
+    const primaryCity = citiesRes.data?.[0];
+    if (!primaryCity) throw new Error("No primary city found");
 
-    const keywordLines = keywords.map((k: any) => `- "${k.keyword}" (${k.status})`).join("\n");
-    const gscLines = gscQueries.map((g: any) => `- "${g.query}" | ${g.impressions} impressions | pos ${Math.round(g.position || 0)}`).join("\n");
+    // Get search queries: try GSC first, fall back to keywords
+    const { data: gscRows } = await supabase
+      .from("gsc_query_data")
+      .select("query, impressions")
+      .eq("client_id", client_id);
 
-    const prompt = `You are an SEO expert. Given the following local business website and their keyword data, identify exactly 6 realistic local/regional competitor domains that would compete for the same keywords in the same geographic area.
+    let searchQueries: string[] = [];
 
-BUSINESS DOMAIN: ${client.domain}
-LOCATION: ${primaryCity.city_name}
+    if (gscRows && gscRows.length > 0) {
+      // Aggregate impressions by query
+      const queryMap = new Map<string, number>();
+      for (const row of gscRows) {
+        queryMap.set(row.query, (queryMap.get(row.query) || 0) + (row.impressions || 0));
+      }
+      searchQueries = Array.from(queryMap.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([q]) => q);
+    }
 
-TRACKED KEYWORDS:
-${keywordLines || "No keywords tracked yet."}
+    if (searchQueries.length === 0) {
+      const { data: kwRows } = await supabase
+        .from("keywords")
+        .select("keyword")
+        .eq("client_id", client_id)
+        .order("created_at", { ascending: true })
+        .limit(5);
+      searchQueries = (kwRows || []).map((k: any) => k.keyword);
+    }
 
-TOP GOOGLE SEARCH CONSOLE QUERIES:
-${gscLines || "No GSC data available."}
+    if (searchQueries.length === 0) {
+      throw new Error("No GSC queries or keywords found to discover competitors");
+    }
 
-RULES:
-- Return ONLY real competing local businesses — companies that serve the same area and offer similar services
-- Do NOT include any of these types of sites: yelp.com, homeadvisor.com, thumbtack.com, yellowpages.com, angieslist.com, angi.com, google.com, facebook.com, instagram.com, amazon.com, bbb.org, mapquest.com, manta.com, nextdoor.com, linkedin.com, twitter.com, x.com, pinterest.com, youtube.com, wikipedia.org, reddit.com
-- Do NOT include any national directories, aggregators, social media platforms, or review sites
-- Do NOT include "${client.domain}" itself
-- Return exactly 6 domains as a JSON array of strings, e.g. ["competitor1.com", "competitor2.com", ...]
-- Return ONLY the JSON array, no other text`;
+    // SERP lookups
+    const frequencyMap = new Map<string, number>();
+    let taskCount = 0;
 
-    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+    for (const keyword of searchQueries) {
+      try {
+        const serpRes = await fetch("https://api.dataforseo.com/v3/serp/google/organic/live", {
+          method: "POST",
+          headers: {
+            "Authorization": authHeader,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify([{
+            keyword,
+            location_code: primaryCity.location_code,
+            language_code: "en",
+            depth: 20,
+          }]),
+        });
 
-    const anthropicData = await anthropicRes.json();
-    const responseText = anthropicData.content?.[0]?.text ?? "[]";
+        taskCount++;
+        const serpData = await serpRes.json();
+        const items = serpData?.tasks?.[0]?.result?.[0]?.items || [];
 
-    // Parse JSON array from response
-    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) throw new Error("Failed to parse AI response");
+        for (const item of items) {
+          if (item.type !== "organic" || !item.domain) continue;
+          const domain = item.domain.replace(/^www\./, "");
+          if (domain === client.domain || domain === `www.${client.domain}` || isBlocked(domain)) continue;
+          frequencyMap.set(domain, (frequencyMap.get(domain) || 0) + 1);
+        }
+      } catch (e) {
+        console.error(`SERP lookup failed for "${keyword}":`, e);
+      }
+    }
 
-    const domains: string[] = JSON.parse(jsonMatch[0]);
-
-    const competitors = domains
-      .filter((d: string) => d && !d.includes(client.domain))
+    // Sort by frequency, take top 6
+    const topDomains = Array.from(frequencyMap.entries())
+      .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
-      .map((domain: string) => ({
+      .map(([domain]) => ({
         client_id,
-        domain: domain.replace(/^https?:\/\//, "").replace(/\/+$/, ""),
+        domain,
         is_auto_discovered: true,
         is_tracked: true,
       }));
 
-    if (competitors.length > 0) {
-      await supabase.from("competitors").upsert(competitors, { onConflict: "client_id,domain" });
+    if (topDomains.length > 0) {
+      await supabase.from("competitors").upsert(topDomains, { onConflict: "client_id,domain" });
     }
 
     // Log API cost
     await supabase.from("api_usage_log").insert({
       client_id,
       function_name: "discover-competitors",
-      api_provider: "anthropic",
-      endpoint: "messages",
-      task_count: 1,
-      cost_usd: 0.003,
+      api_provider: "dataforseo",
+      endpoint: "serp/google/organic/live",
+      task_count: taskCount,
+      cost_usd: 0.002 * taskCount,
     });
 
     const { data: allCompetitors } = await supabase.from("competitors").select("*").eq("client_id", client_id);
