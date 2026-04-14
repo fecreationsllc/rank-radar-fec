@@ -1,48 +1,45 @@
 
+
+# Rewrite discover-competitors with DataForSEO SERP + location_code
+
 ## Summary
-I inspected the codebase and backend records first. The checked-in `supabase/functions/discover-competitors/index.ts` already shows a DataForSEO SERP-based implementation, and recent usage records for `discover-competitors` are already logging `dataforseo` against `serp/google/organic/live`. Anthropic references currently appear in `generate-suggestions`, not in `discover-competitors`. So this looks like a stale/deployed-version mismatch or a need to hard-refresh the function implementation rather than a brand new design.
+Complete rewrite of `supabase/functions/discover-competitors/index.ts` from scratch. Zero Anthropic code. Uses DataForSEO SERP API with `location_code` (not `location_name`) per user preference.
 
-## Plan
-1. **Hard-rewrite `supabase/functions/discover-competitors/index.ts` to the exact SERP-only flow**
-   - Remove any remaining Anthropic-specific code paths if present in the deployed function:
-     - `ANTHROPIC_API_KEY`
-     - Anthropic fetch call
-     - AI JSON parsing
-     - Anthropic usage logging
-   - Keep the existing service-role client and CORS handling.
+## Single file change: `supabase/functions/discover-competitors/index.ts`
 
-2. **Implement the real competitor discovery flow**
-   - Fetch the client and its primary city.
-   - Fetch GSC rows for the client, aggregate by `query`, sum `impressions`, sort descending, and take the top 5 queries.
-   - For each query, call DataForSEO `serp/google/organic/live` with Basic auth from `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD`.
-   - Extract domains from organic results only, normalize them, and count appearances across SERPs with a `Map<string, number>`.
+Write the entire file from scratch with this logic:
 
-3. **Filter and persist competitors**
-   - Exclude:
-     - the client’s own domain
-     - the blocklisted domains you listed
-     - any domain containing `"yelp"` or `"google"`
-   - Sort by frequency descending, take the top 6, and upsert:
-     - `client_id`
-     - `domain`
-     - `is_auto_discovered: true`
-     - `is_tracked: true`
+1. **Imports**: `serve` from deno std, `createClient` from supabase-js. Define `corsHeaders`.
 
-4. **Keep logging aligned with DataForSEO**
-   - Insert into `api_usage_log` with:
-     - `api_provider: "dataforseo"`
-     - `endpoint: "serp/google/organic/live"`
-     - `task_count`: number of SERP calls made
-     - `cost_usd: 0.002 * taskCount`
+2. **Handler**: OPTIONS check → parse `client_id` from body → create supabase service client.
 
-5. **Leave the UI untouched**
-   - `CompetitorsTab.tsx` already has the 6-competitor limit and still calls the same function.
-   - `AddClientModal.tsx` also already invokes `discover-competitors`, so no caller changes are needed.
+3. **Fetch client + primary city**:
+   - `clients` table `.eq("id", client_id).single()`
+   - `client_cities` table `.eq("client_id", client_id).eq("is_primary", true).limit(1)`
 
-## Technical details
-- **File to update:** `supabase/functions/discover-competitors/index.ts`
-- **No database changes needed**
-- **Validation after implementation:**
-  - confirm no Anthropic code remains in `discover-competitors`
-  - confirm new runs log only `dataforseo` usage for this function
-  - confirm returned competitors come from real SERP domains rather than AI-generated output
+4. **Get top 5 GSC queries** (simple approach — no aggregation needed since we just want top queries):
+   - `supabase.from("gsc_query_data").select("query, impressions").eq("client_id", client_id).order("impressions", { ascending: false }).limit(50)`
+   - Deduplicate by query in JS using a Map (sum impressions), sort desc, take top 5
+   - If none found, fall back to `keywords` table `.eq("client_id", client_id).order("created_at", { ascending: true }).limit(5)` using `.keyword` field
+   - If still none, throw error
+
+5. **DataForSEO SERP calls**: For each query, POST to `https://api.dataforseo.com/v3/serp/google/organic/live`:
+   ```
+   [{ keyword: query, location_code: primaryCity.location_code, language_code: "en", depth: 20 }]
+   ```
+   Auth: `"Basic " + btoa(DATAFORSEO_LOGIN + ":" + DATAFORSEO_PASSWORD)`
+
+6. **Extract & count domains**: From `serpData.tasks?.[0]?.result?.[0]?.items`, filter `type === "organic"`, get `item.domain`, strip `www.`, increment frequency map.
+
+7. **Blocklist filter**: Exclude client's own domain + these domains: yelp.com, yellowpages.com, homeadvisor.com, angi.com, thumbtack.com, bbb.org, google.com, facebook.com, instagram.com, twitter.com, linkedin.com, pinterest.com, youtube.com, amazon.com, wikipedia.org, reddit.com, nextdoor.com, mapquest.com, apple.com, x.com, manta.com, angieslist.com. Also exclude any domain containing "yelp" or "google".
+
+8. **Sort by frequency desc, take top 6**. Upsert to `competitors` with `{ client_id, domain, is_auto_discovered: true, is_tracked: true }`, onConflict `"client_id,domain"`.
+
+9. **Log usage**: Insert to `api_usage_log` with provider `"dataforseo"`, endpoint `"serp/google/organic/live"`, task_count = number of SERP calls, cost_usd = 0.002 × task_count.
+
+10. **Return** all competitors for the client.
+
+11. **Deploy** the edge function after writing.
+
+## No other files changed
+
