@@ -1,39 +1,32 @@
 
 
-# Improve keyword suggestion and volume visibility
+# Bulk-Add GSC Queries to Tracking
 
-## Feature 1: Toggle to hide zero/null volume keywords in the table
+## What changes
 
-Add a toggle button in the Keywords tab toolbar that filters out keywords with null or 0 search volume. Clicking again shows all keywords.
+Single file edit: `src/components/dashboard/SearchConsoleTab.tsx`
 
-**File**: `src/components/dashboard/KeywordsTab.tsx`
-- Add state `hideNoVolume` (default false)
-- Add a toggle button in the toolbar (e.g. "Hide No Volume" / "Show All")
-- Filter `sortedRows` to exclude rows where `searchVolume` is null or 0 when toggle is active
-- No keywords are deleted — just visually hidden
+## Plan
 
-## Feature 2: Pre-fetch volume for suggested keywords before showing them
+1. **Select All checkbox in header** — Add a checkbox in the first `<TableHead>` that toggles all visible opportunity (untracked) queries in `selectedQueries`. Checked = all selected, indeterminate = some selected.
 
-Update the `suggest-more-keywords` edge function to call the DataForSEO Keywords Data API after AI generates suggestions, then return only keywords with volume ≥ 50, along with their volume numbers.
+2. **Tracked rows get greyed-out checkbox with tooltip** — Instead of showing nothing for tracked rows, show a disabled, greyed-out checkbox wrapped in a `Tooltip` ("Already tracked"). Import `Tooltip`/`TooltipTrigger`/`TooltipContent`/`TooltipProvider` from the existing UI components.
 
-**File**: `supabase/functions/suggest-more-keywords/index.ts`
-- After getting the AI-suggested keyword list, call `keywords_data/google_ads/search_volume/live` with those keywords + the client's primary city location_code
-- Filter out any keyword with volume < 50 or null
-- Return `{ keywords: [{ keyword: string, volume: number }] }` instead of `{ keywords: string[] }`
-- Log the extra DataForSEO API cost
+3. **"Add selected to tracking" button** — Place next to the "Sync GSC" button. Shows count badge (e.g. "Add 5 to tracking"). Disabled when `selectedQueries.size === 0` or while adding.
 
-**File**: `src/components/dashboard/KeywordsTab.tsx`
-- Update `suggestedKeywords` state type from `string[]` to `{ keyword: string; volume: number }[]`
-- Pass the new shape to `SuggestKeywordsModal`
+4. **`handleAddToTracking` function** — On click:
+   - Fetch `client_cities` for this client to get all city IDs
+   - Insert into `keywords` table: one row per selected query (with `client_id`, `keyword`, `status: 'monitoring'`)
+   - Use `.upsert()` or handle duplicates with `onConflict` — since the keywords table has no unique constraint on (client_id, keyword), we'll filter out already-tracked keywords client-side (they can't be selected anyway)
+   - After insert, trigger `sync-rankings` and `fetch-search-volume` (same pattern as AddKeywordsModal)
+   - Show toast with count
+   - Invalidate `keywords-list` and `keywords-with-ranks` queries using `useQueryClient`
+   - Clear `selectedQueries`
 
-**File**: `src/components/dashboard/SuggestKeywordsModal.tsx`
-- Update props to accept `{ keyword: string; volume: number }[]`
-- Show volume next to each keyword in the list (e.g. "hardwood flooring nyc — 1,200/mo")
-- Update select/deselect logic to work with the new object shape
-- `onAdd` still passes `string[]` (just the keyword text)
+5. **Query client invalidation** — Import `useQueryClient` from `@tanstack/react-query`. After successful insert, call `queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks"] })` and refetch tracked keywords.
 
-## Files changed
-1. `supabase/functions/suggest-more-keywords/index.ts` — add DataForSEO volume lookup + filter ≥ 50
-2. `src/components/dashboard/KeywordsTab.tsx` — add hide/show toggle + update suggested keywords type
-3. `src/components/dashboard/SuggestKeywordsModal.tsx` — show volume next to each suggestion
+## Technical details
 
+- The `sortedData.slice(0, 50)` means Select All only applies to the visible 50 rows
+- Opportunity-only selection is already enforced (tracked rows show disabled checkbox, can't be toggled into the set)
+- Uses `TooltipProvider` wrapping just the checkbox cell to avoid needing a global provider change
