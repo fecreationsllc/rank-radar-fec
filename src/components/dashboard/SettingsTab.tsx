@@ -148,10 +148,12 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
   };
 
   const handleSendTestAlert = async () => {
-    if (!client.alert_email) {
+    if (!alertEmail) {
       toast({ title: "No alert email set", description: "Add an alert email above first.", variant: "destructive" });
       return;
     }
+    // Save the email first so the edge function can read it
+    await supabase.from("clients").update({ alert_email: alertEmail }).eq("id", client.id);
     setSendingTestAlert(true);
     try {
       const { data, error } = await supabase.functions.invoke("send-test-alert", {
@@ -159,7 +161,7 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast({ title: "Test alert sent!", description: `Check ${client.alert_email}` });
+      toast({ title: "Test alert sent!", description: `Check ${alertEmail}` });
     } catch (e: any) {
       toast({ title: "Failed to send test alert", description: e.message, variant: "destructive" });
     } finally {
@@ -283,12 +285,12 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
         <CardHeader><CardTitle>Rank Drop Alerts</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            When a keyword drops 10+ positions, an alert email is sent to <strong>{client.alert_email || "—"}</strong>.
+            When a keyword drops 10+ positions, an alert email is sent to <strong>{alertEmail || "—"}</strong>.
           </p>
           <Button
             variant="outline"
             onClick={handleSendTestAlert}
-            disabled={sendingTestAlert || !client.alert_email}
+            disabled={sendingTestAlert || !alertEmail}
           >
             {sendingTestAlert ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Mail className="h-4 w-4 mr-1" />}
             Send Test Alert
