@@ -76,6 +76,7 @@ export default function Report() {
           const vol = volumes.find((v: any) => v.keyword_id === kw.id && v.city_id === city.id);
           rows.push({
             keyword: kw.keyword,
+            status: kw.status,
             today,
             monthAgo,
             history: kwHistory.map((h) => h.position),
@@ -163,6 +164,7 @@ export default function Report() {
           <TableHeader>
             <TableRow>
               <TableHead>Keyword</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead>Volume</TableHead>
               <TableHead>Position Today</TableHead>
               <TableHead>Last Month</TableHead>
@@ -176,6 +178,16 @@ export default function Report() {
               return (
                 <TableRow key={i}>
                   <TableCell className="font-medium">{row.keyword}</TableCell>
+                  <TableCell>
+                    {(() => {
+                      const style = getStatusStyle(row.status);
+                      return (
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border ${style.className}`}>
+                          {style.label}
+                        </span>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {row.searchVolume !== null ? row.searchVolume.toLocaleString() : "—"}
                   </TableCell>
@@ -189,7 +201,7 @@ export default function Report() {
               );
             })}
             {rows.length === 0 && (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No ranking data yet.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No ranking data yet.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
