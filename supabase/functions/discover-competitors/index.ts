@@ -123,6 +123,9 @@ serve(async (req) => {
     const frequencyMap = new Map<string, number>();
     let taskCount = 0;
     const serpErrors: string[] = [];
+    let firstSerpRawResponse: any = null;
+    let firstSerpItemCount: number = 0;
+    let firstSerpStatus: number | null = null;
 
     for (const keyword of searchQueries) {
       try {
@@ -148,6 +151,12 @@ serve(async (req) => {
         taskCount++;
         const serpData = await serpRes.json();
         const items = serpData?.tasks?.[0]?.result?.[0]?.items || [];
+
+        if (taskCount === 1) {
+          firstSerpRawResponse = serpData;
+          firstSerpItemCount = items.length;
+          firstSerpStatus = serpData?.status_code ?? null;
+        }
 
         for (const item of items) {
           if (item.type !== "organic" || !item.domain) continue;
@@ -211,6 +220,9 @@ serve(async (req) => {
         taskCount,
         uniqueDomainsFound: frequencyMap.size,
         serpErrors,
+        firstSerpRawResponse,
+        firstSerpItemCount,
+        firstSerpStatus,
       },
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
