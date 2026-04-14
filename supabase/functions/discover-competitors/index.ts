@@ -1,3 +1,4 @@
+// discover-competitors: Uses DataForSEO SERP API to find real competitors (no AI)
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
@@ -56,7 +57,6 @@ serve(async (req) => {
     let searchQueries: string[] = [];
 
     if (gscRows && gscRows.length > 0) {
-      // Aggregate impressions by query
       const queryMap = new Map<string, number>();
       for (const row of gscRows) {
         queryMap.set(row.query, (queryMap.get(row.query) || 0) + (row.impressions || 0));
@@ -81,7 +81,9 @@ serve(async (req) => {
       throw new Error("No GSC queries or keywords found to discover competitors");
     }
 
-    // SERP lookups
+    console.log(`Discovering competitors for client ${client_id} using ${searchQueries.length} queries:`, searchQueries);
+
+    // SERP lookups via DataForSEO
     const frequencyMap = new Map<string, number>();
     let taskCount = 0;
 
@@ -115,6 +117,8 @@ serve(async (req) => {
         console.error(`SERP lookup failed for "${keyword}":`, e);
       }
     }
+
+    console.log(`Found ${frequencyMap.size} unique domains across ${taskCount} SERP calls`);
 
     // Sort by frequency, take top 6
     const topDomains = Array.from(frequencyMap.entries())
