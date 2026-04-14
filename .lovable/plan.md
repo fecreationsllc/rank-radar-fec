@@ -1,32 +1,43 @@
 
 
-# Bulk-Add GSC Queries to Tracking
+# Import Ranked Keywords Feature
 
-## What changes
+## Summary
+Add an "Import Ranked Keywords" button to the Keywords tab that fetches the client's currently-ranking keywords from DataForSEO and lets the user select which ones to add to tracking.
 
-Single file edit: `src/components/dashboard/SearchConsoleTab.tsx`
+## New Files
 
-## Plan
+### 1. Edge function: `supabase/functions/get-ranked-keywords/index.ts`
+- Accept POST with `{ domain, location_code }` 
+- Call DataForSEO Labs `ranked_keywords/live` endpoint with basic auth (DATAFORSEO_LOGIN/PASSWORD)
+- Body: `[{ target: domain, location_code, language_code: "en", limit: 100, filters: ["ranked_serp_element.serp_item.rank_absolute","<=",100] }]`
+- Parse response, extract keyword, position (`rank_absolute`), and search volume (`keyword_data.keyword_info.search_volume`)
+- Return sorted by search volume descending
+- Include CORS headers
 
-1. **Select All checkbox in header** — Add a checkbox in the first `<TableHead>` that toggles all visible opportunity (untracked) queries in `selectedQueries`. Checked = all selected, indeterminate = some selected.
+### 2. Modal: `src/components/dashboard/ImportRankedKeywordsModal.tsx`
+- Styled like SuggestKeywordsModal but wider (max-w-lg) to fit position column
+- Props: `open, onOpenChange, clientId, clientDomain, onImported`
+- On open, fetches client's primary city location_code, then calls edge function
+- **Search input** at top to filter keywords by text
+- **Select All** checkbox (applies to visible filtered, non-tracked keywords only)
+- Each row: checkbox | keyword text | PositionBadge (colored) | volume/mo
+- Already-tracked keywords: greyed out row, disabled checkbox, "Already tracked" label instead of checkbox
+- Tracks which keywords are already in the keywords table by querying existing keywords for this client
+- **"Add Selected to Tracking"** button in footer with count
+- On add: insert into `keywords` table (same pattern as AddKeywordsModal — `client_id + keyword`), trigger `sync-rankings` and `fetch-search-volume`, invalidate queries, show toast, close modal
 
-2. **Tracked rows get greyed-out checkbox with tooltip** — Instead of showing nothing for tracked rows, show a disabled, greyed-out checkbox wrapped in a `Tooltip` ("Already tracked"). Import `Tooltip`/`TooltipTrigger`/`TooltipContent`/`TooltipProvider` from the existing UI components.
+## Modified Files
 
-3. **"Add selected to tracking" button** — Place next to the "Sync GSC" button. Shows count badge (e.g. "Add 5 to tracking"). Disabled when `selectedQueries.size === 0` or while adding.
+### 3. `src/components/dashboard/KeywordsTab.tsx`
+- Import `ImportRankedKeywordsModal` and `Download` (or `Import`) icon from lucide
+- Add `importOpen` state
+- Add "Import Ranked Keywords" button in toolbar (next to "Add Keywords")
+- Render `ImportRankedKeywordsModal` at bottom with appropriate props
 
-4. **`handleAddToTracking` function** — On click:
-   - Fetch `client_cities` for this client to get all city IDs
-   - Insert into `keywords` table: one row per selected query (with `client_id`, `keyword`, `status: 'monitoring'`)
-   - Use `.upsert()` or handle duplicates with `onConflict` — since the keywords table has no unique constraint on (client_id, keyword), we'll filter out already-tracked keywords client-side (they can't be selected anyway)
-   - After insert, trigger `sync-rankings` and `fetch-search-volume` (same pattern as AddKeywordsModal)
-   - Show toast with count
-   - Invalidate `keywords-list` and `keywords-with-ranks` queries using `useQueryClient`
-   - Clear `selectedQueries`
+## Technical Details
+- Edge function uses `Deno.env.get("DATAFORSEO_LOGIN")` and `DATAFORSEO_PASSWORD`
+- DataForSEO response path: `result[0].items[].keyword_data.keyword`, `.keyword_data.keyword_info.search_volume`, `.ranked_serp_element.serp_item.rank_absolute`
+- Already-tracked detection: fetch existing keywords for client_id client-side and compare
+- Insert pattern matches AddKeywordsModal (no cross-join with cities needed since AddKeywordsModal doesn't do that either — just `client_id + keyword`)
 
-5. **Query client invalidation** — Import `useQueryClient` from `@tanstack/react-query`. After successful insert, call `queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks"] })` and refetch tracked keywords.
-
-## Technical details
-
-- The `sortedData.slice(0, 50)` means Select All only applies to the visible 50 rows
-- Opportunity-only selection is already enforced (tracked rows show disabled checkbox, can't be toggled into the set)
-- Uses `TooltipProvider` wrapping just the checkbox cell to avoid needing a global provider change
