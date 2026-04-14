@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, RefreshCw, MousePointerClick, Eye, Target, TrendingUp, Sparkles, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import { Loader2, RefreshCw, MousePointerClick, Eye, Target, TrendingUp, Sparkles, ArrowUp, ArrowDown, ArrowUpDown, Plus } from "lucide-react";
 
 type SortColumn = "query" | "clicks" | "impressions" | "ctr" | "position" | "status";
 type SortDirection = "asc" | "desc";
@@ -19,7 +20,9 @@ interface SearchConsoleTabProps {
 
 export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [sortColumn, setSortColumn] = useState<SortColumn>("impressions");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedQueries, setSelectedQueries] = useState<Set<string>>(new Set());
@@ -56,7 +59,7 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
     enabled: connectionStatus?.connected === true,
   });
 
-  const { data: trackedKeywords = [] } = useQuery({
+  const { data: trackedKeywords = [], refetch: refetchTracked } = useQuery({
     queryKey: ["keywords-list", client.id],
     queryFn: async () => {
       const { data } = await supabase.from("keywords").select("keyword").eq("client_id", client.id);
@@ -130,6 +133,19 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
     return arr;
   }, [aggregated, sortColumn, sortDirection]);
 
+  const visibleData = sortedData.slice(0, 50);
+  const visibleOpportunities = visibleData.filter((q) => !q.isTracked);
+  const allVisibleSelected = visibleOpportunities.length > 0 && visibleOpportunities.every((q) => selectedQueries.has(q.query));
+  const someVisibleSelected = visibleOpportunities.some((q) => selectedQueries.has(q.query));
+
+  const handleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedQueries(new Set());
+    } else {
+      setSelectedQueries(new Set(visibleOpportunities.map((q) => q.query)));
+    }
+  };
+
   const handleSync = async () => {
     setSyncing(true);
     try {
@@ -144,6 +160,43 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
       toast({ title: "Sync failed", description: e.message, variant: "destructive" });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleAddToTracking = async () => {
+    if (selectedQueries.size === 0) return;
+    setAdding(true);
+    try {
+      const { data: cities } = await supabase
+        .from("client_cities")
+        .select("id")
+        .eq("client_id", client.id);
+
+      const keywords = Array.from(selectedQueries);
+      const inserts = keywords.map((kw) => ({
+        client_id: client.id,
+        keyword: kw,
+        status: "monitoring",
+      }));
+
+      const { error } = await supabase.from("keywords").insert(inserts);
+      if (error) throw error;
+
+      toast({ title: `${keywords.length} keywords added to tracking` });
+
+      // Trigger background sync & volume fetch
+      supabase.functions.invoke("sync-rankings", { body: { client_id: client.id } }).catch(() => {});
+      supabase.functions.invoke("fetch-search-volume", { body: { client_id: client.id } }).catch(() => {});
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks"] });
+      queryClient.invalidateQueries({ queryKey: ["keywords-list", client.id] });
+      refetchTracked();
+      setSelectedQueries(new Set());
+    } catch (e: any) {
+      toast({ title: "Failed to add keywords", description: e.message, variant: "destructive" });
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -163,10 +216,18 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Search Console</h2>
-        <Button onClick={handleSync} disabled={syncing} variant="outline" size="sm">
-          {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-          Sync GSC
-        </Button>
+        <div className="flex items-center gap-2">
+          {selectedQueries.size > 0 && (
+            <Button onClick={handleAddToTracking} disabled={adding} size="sm">
+              {adding ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+              Add {selectedQueries.size} to tracking
+            </Button>
+          )}
+          <Button onClick={handleSync} disabled={syncing} variant="outline" size="sm">
+            {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+            Sync GSC
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -212,57 +273,81 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
         <Card className="rounded-xl">
           <CardHeader><CardTitle className="text-base">Top Queries (Last 28 days)</CardTitle></CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-               <TableRow>
-                  <TableHead className="w-10"></TableHead>
-                  <TableHead className="cursor-pointer select-none" onClick={() => handleSort("query")}>
-                    <span className="inline-flex items-center">Query<SortIcon col="query" /></span>
-                  </TableHead>
-                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("clicks")}>
-                    <span className="inline-flex items-center justify-end w-full">Clicks<SortIcon col="clicks" /></span>
-                  </TableHead>
-                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("impressions")}>
-                    <span className="inline-flex items-center justify-end w-full">Impressions<SortIcon col="impressions" /></span>
-                  </TableHead>
-                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("ctr")}>
-                    <span className="inline-flex items-center justify-end w-full">CTR<SortIcon col="ctr" /></span>
-                  </TableHead>
-                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("position")}>
-                    <span className="inline-flex items-center justify-end w-full">Position<SortIcon col="position" /></span>
-                  </TableHead>
-                  <TableHead className="text-center cursor-pointer select-none" onClick={() => handleSort("status")}>
-                    <span className="inline-flex items-center justify-center w-full">Status<SortIcon col="status" /></span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedData.slice(0, 50).map((q) => (
-                  <TableRow key={q.query}>
-                    <TableCell>
-                      {!q.isTracked && (
-                        <Checkbox
-                          checked={selectedQueries.has(q.query)}
-                          onCheckedChange={() => toggleQuery(q.query)}
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell className="font-medium">{q.query}</TableCell>
-                    <TableCell className="text-right">{q.clicks.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{q.impressions.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{(q.ctr * 100).toFixed(1)}%</TableCell>
-                    <TableCell className="text-right">{q.position.toFixed(1)}</TableCell>
-                    <TableCell className="text-center">
-                      {q.isTracked ? (
-                        <Badge variant="secondary" className="text-xs">Tracked</Badge>
-                      ) : (
-                        <Badge className="text-xs bg-amber-100 text-amber-800 hover:bg-amber-200">Opportunity</Badge>
-                      )}
-                    </TableCell>
+            <TooltipProvider>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={allVisibleSelected}
+                        ref={(el) => {
+                          if (el) {
+                            const input = el.querySelector("button");
+                            if (input) {
+                              (input as any).dataset.indeterminate = someVisibleSelected && !allVisibleSelected ? "true" : undefined;
+                            }
+                          }
+                        }}
+                        onCheckedChange={handleSelectAll}
+                      />
+                    </TableHead>
+                    <TableHead className="cursor-pointer select-none" onClick={() => handleSort("query")}>
+                      <span className="inline-flex items-center">Query<SortIcon col="query" /></span>
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("clicks")}>
+                      <span className="inline-flex items-center justify-end w-full">Clicks<SortIcon col="clicks" /></span>
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("impressions")}>
+                      <span className="inline-flex items-center justify-end w-full">Impressions<SortIcon col="impressions" /></span>
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("ctr")}>
+                      <span className="inline-flex items-center justify-end w-full">CTR<SortIcon col="ctr" /></span>
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("position")}>
+                      <span className="inline-flex items-center justify-end w-full">Position<SortIcon col="position" /></span>
+                    </TableHead>
+                    <TableHead className="text-center cursor-pointer select-none" onClick={() => handleSort("status")}>
+                      <span className="inline-flex items-center justify-center w-full">Status<SortIcon col="status" /></span>
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {visibleData.map((q) => (
+                    <TableRow key={q.query}>
+                      <TableCell>
+                        {q.isTracked ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <Checkbox checked={false} disabled className="opacity-30" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>Already tracked</TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <Checkbox
+                            checked={selectedQueries.has(q.query)}
+                            onCheckedChange={() => toggleQuery(q.query)}
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell className="font-medium">{q.query}</TableCell>
+                      <TableCell className="text-right">{q.clicks.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">{q.impressions.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">{(q.ctr * 100).toFixed(1)}%</TableCell>
+                      <TableCell className="text-right">{q.position.toFixed(1)}</TableCell>
+                      <TableCell className="text-center">
+                        {q.isTracked ? (
+                          <Badge variant="secondary" className="text-xs">Tracked</Badge>
+                        ) : (
+                          <Badge className="text-xs bg-amber-100 text-amber-800 hover:bg-amber-200">Opportunity</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TooltipProvider>
           </CardContent>
         </Card>
       )}
