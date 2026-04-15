@@ -185,21 +185,14 @@ serve(async (req) => {
       `Found ${frequencyMap.size} unique domains across ${taskCount} SERP calls`
     );
 
-    // Clean up previously stored competitors that are now on the blocklist
-    const { data: existingCompetitors } = await supabase
+    // Delete all previously auto-discovered competitors for this client
+    await supabase
       .from("competitors")
-      .select("id, domain")
-      .eq("client_id", client_id);
+      .delete()
+      .eq("client_id", client_id)
+      .eq("is_auto_discovered", true);
 
-    if (existingCompetitors && existingCompetitors.length > 0) {
-      const blockedIds = existingCompetitors
-        .filter((c) => isBlocked(c.domain))
-        .map((c) => c.id);
-      if (blockedIds.length > 0) {
-        await supabase.from("competitors").delete().in("id", blockedIds);
-        console.log(`Removed ${blockedIds.length} blocked competitor(s)`);
-      }
-    }
+    console.log("Cleared old auto-discovered competitors");
 
     // Sort by frequency, take top 6
     const topDomains = Array.from(frequencyMap.entries())
