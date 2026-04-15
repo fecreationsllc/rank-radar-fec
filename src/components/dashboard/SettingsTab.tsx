@@ -54,10 +54,15 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
   });
 
   const { data: gscStatus, refetch: refetchGscStatus } = useQuery({
-    queryKey: ["gsc-status"],
+    queryKey: ["gsc-status", client.id],
     queryFn: async () => {
-      const { data } = await supabase.functions.invoke("gsc-auth", { body: { action: "status" } });
-      return data as { connected: boolean; connected_at?: string };
+      const { data } = await supabase.functions.invoke("gsc-auth", { body: { action: "status", client_id: client.id } });
+      return data as {
+        client_connected: boolean;
+        client_connected_at?: string | null;
+        global_connected: boolean;
+        global_connected_at?: string | null;
+      };
     },
   });
 
