@@ -90,6 +90,41 @@ export type Database = {
           },
         ]
       }
+      client_gsc_connections: {
+        Row: {
+          access_token: string
+          client_id: string
+          created_at: string
+          id: string
+          refresh_token: string
+          token_expires_at: string
+        }
+        Insert: {
+          access_token: string
+          client_id: string
+          created_at?: string
+          id?: string
+          refresh_token: string
+          token_expires_at: string
+        }
+        Update: {
+          access_token?: string
+          client_id?: string
+          created_at?: string
+          id?: string
+          refresh_token?: string
+          token_expires_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_gsc_connections_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           alert_email: string | null
