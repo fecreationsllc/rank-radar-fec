@@ -32,6 +32,15 @@ export function CompetitorsTab({ client }: CompetitorsTabProps) {
     },
   });
 
+  // Count tracked keywords for this client (to show shared count)
+  const { data: keywordCount = 0 } = useQuery({
+    queryKey: ["keyword-count", client.id],
+    queryFn: async () => {
+      const { count } = await supabase.from("keywords").select("*", { count: "exact", head: true }).eq("client_id", client.id);
+      return count ?? 0;
+    },
+  });
+
   const atLimit = competitors.length >= 6;
 
   const handleDiscover = async () => {
@@ -111,6 +120,7 @@ export function CompetitorsTab({ client }: CompetitorsTabProps) {
                     <div>
                       <a href={`https://${comp.domain}`} target="_blank" rel="noopener noreferrer" className="font-semibold text-foreground hover:underline cursor-pointer">{comp.domain}</a>
                       {comp.is_auto_discovered && <Badge variant="secondary" className="mt-1 text-xs">Auto-discovered</Badge>}
+                      <p className="text-xs text-muted-foreground mt-1">{keywordCount} tracked keywords</p>
                     </div>
                     <button onClick={() => handleRemove(comp.id)} className="text-muted-foreground hover:text-destructive">
                       <X className="h-4 w-4" />
