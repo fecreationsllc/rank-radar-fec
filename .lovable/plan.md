@@ -1,31 +1,26 @@
 
 
-# Add Blocklist Cleanup Step to discover-competitors
+# Replace blocklist cleanup with full auto-discovered wipe
 
 ## Summary
-Before upserting newly discovered competitors, query existing competitors for this client and delete any whose domain is now on the blocklist.
+Change the cleanup step to delete all auto-discovered competitors for the client before upserting the fresh top 6, instead of only removing blocked ones.
 
-## Change (`supabase/functions/discover-competitors/index.ts`)
+## Change (`supabase/functions/discover-competitors/index.ts`, lines 188-202)
 
-Insert a cleanup block between line 187 (the log statement) and line 188 (the "Sort by frequency" comment):
+Replace the current blocklist cleanup block with:
 
 ```typescript
-// Clean up previously stored competitors that are now on the blocklist
-const { data: existingCompetitors } = await supabase
+// Delete all previously auto-discovered competitors for this client
+await supabase
   .from("competitors")
-  .select("id, domain")
-  .eq("client_id", client_id);
+  .delete()
+  .eq("client_id", client_id)
+  .eq("is_auto_discovered", true);
 
-if (existingCompetitors && existingCompetitors.length > 0) {
-  const blockedIds = existingCompetitors
-    .filter((c) => isBlocked(c.domain))
-    .map((c) => c.id);
-  if (blockedIds.length > 0) {
-    await supabase.from("competitors").delete().in("id", blockedIds);
-    console.log(`Removed ${blockedIds.length} blocked competitor(s)`);
-  }
-}
+console.log("Cleared old auto-discovered competitors");
 ```
 
-No other changes. Redeploy after editing.
+This is simpler — one delete call filtered by `client_id` + `is_auto_discovered = true`. Manually added competitors (`is_auto_discovered = false`) are untouched.
+
+No other changes. Redeploy the edge function after.
 
