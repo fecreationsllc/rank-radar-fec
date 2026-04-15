@@ -1,52 +1,36 @@
 
-# Per-Client Google Search Console Connections
+# 6 Improvements Plan
 
-## Summary
-Allow each client to optionally connect its own Google account for GSC data, falling back to the global shared connection.
+## 1. Keyword Sync Feedback (KeywordsTab)
+Add loading spinner + disabled state to "Sync Now" button while `sync-rankings` runs. Show success toast with result count or error toast on failure — same pattern as GSC sync button.
 
-## 1. New database table: `client_gsc_connections`
+**Files:** `src/components/dashboard/KeywordsTab.tsx`
 
-```sql
-CREATE TABLE public.client_gsc_connections (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  client_id UUID NOT NULL UNIQUE REFERENCES public.clients(id) ON DELETE CASCADE,
-  access_token TEXT NOT NULL,
-  refresh_token TEXT NOT NULL,
-  token_expires_at TIMESTAMPTZ NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-ALTER TABLE public.client_gsc_connections ENABLE ROW LEVEL SECURITY;
--- authenticated + service_role full access policies
-```
+## 2. Volume Note for N/A Keywords (KeywordsTab)
+When any keyword shows "N/A" for search volume, render a small info banner: "Volume data typically updates within 24 hours." Hide once all keywords have volume.
 
-One row per client. The `UNIQUE` on `client_id` ensures at most one connection per client.
+**Files:** `src/components/dashboard/KeywordsTab.tsx`
 
-## 2. Update `gsc-auth` edge function
+## 3. Add-to-Tracking Button on Suggestions (SuggestionsTab)
+When a suggestion recommends tracking a keyword, show an inline "Add to Tracking" button. On click: insert into `keywords` with status `monitoring`, trigger background `sync-rankings` + `fetch-search-volume`, show toast, invalidate queries.
 
-Add optional `client_id` parameter to all actions:
+**Files:** `src/components/dashboard/SuggestionsTab.tsx`
 
-- **`get_auth_url`**: Encode `client_id` into the OAuth `state` param so it survives the redirect.
-- **`exchange_code`**: Accept `client_id` (from body or parsed from `state`). If present, upsert into `client_gsc_connections`; otherwise upsert into global `gsc_connections`.
-- **`disconnect`**: If `client_id` provided, delete from `client_gsc_connections` for that client.
-- **`status`**: If `client_id` provided, return `{ client_connected, global_connected, client_connected_at, global_connected_at }`.
+## 4. Competitor Shared Keyword Count (CompetitorsTab)
+For each competitor card, count how many of the client's tracked keywords also appear in that competitor's SERP results (via `rank_history`). Display "X shared keywords" on each card.
 
-## 3. Update `fetch-gsc-data` edge function
+**Files:** `src/components/dashboard/CompetitorsTab.tsx`
 
-In the handler, before falling back to the global `gsc_connections` row:
-1. Query `client_gsc_connections` WHERE `client_id` matches.
-2. If found, use that token (refresh if needed).
-3. If not found, fall back to `gsc_connections` (existing behavior).
+## 5. Rank Drop Email Alerts (Edge Function)
+Create `send-rank-alerts` edge function:
+- Query latest two rank checks per keyword per city
+- Identify drops of 5+ positions
+- Send email via Resend API (`RESEND_API_KEY` already configured) to `client.alert_email` or fallback `fecreationsllc@gmail.com`
+- Use `api_usage_log` or a simple dedup mechanism to avoid duplicate alerts
 
-The `refreshToken` helper already works generically — just pass the right table name for updates.
+**Files:** `supabase/functions/send-rank-alerts/index.ts`
 
-## 4. Update `SettingsTab.tsx` UI
+## 6. Keyword Trend Sparkline (KeywordsTab)
+Add "Trend" column with a small sparkline showing 30-day position history from `rank_history`. Reuse existing `Sparkline` component. Fetch rank history alongside keyword data.
 
-Replace the current binary connected/not-connected GSC card with three states:
-
-| State | UI |
-|---|---|
-| Client has own connection | ✅ "Connected (dedicated)" + Disconnect button |
-| No client connection, but global exists | 🔗 "Using shared connection" + "Connect own account" button |
-| Neither connected | ❌ "Not connected" + "Connect" button |
-
-Pass `client_id` in the `gsc-auth` invocations. On OAuth callback, parse `state` to recover `client_id`.
+**Files:** `src/components/dashboard/KeywordsTab.tsx`, `src/components/Sparkline.tsx`
