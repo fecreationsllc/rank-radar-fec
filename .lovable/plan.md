@@ -1,22 +1,31 @@
 
 
-# Update discover-competitors: add retailer blocklist, clean up debug
+# Add Blocklist Cleanup Step to discover-competitors
 
-## Changes (single file: `supabase/functions/discover-competitors/index.ts`)
+## Summary
+Before upserting newly discovered competitors, query existing competitors for this client and delete any whose domain is now on the blocklist.
 
-1. **Add 15 retailer domains to BLOCKLIST** (lines 10-33): Add `"homedepot.com"`, `"lowes.com"`, `"walmart.com"`, `"costco.com"`, `"target.com"`, `"bestbuy.com"`, `"wayfair.com"`, `"overstock.com"`, `"ikea.com"`, `"flooranddecor.com"`, `"builddirect.com"`, `"houzz.com"`, `"samsclub.com"`, `"menards.com"`, `"acehardware.com"`.
+## Change (`supabase/functions/discover-competitors/index.ts`)
 
-2. **SERP URL already correct** — line 133 already has `/live/advanced`. No change needed.
+Insert a cleanup block between line 187 (the log statement) and line 188 (the "Sort by frequency" comment):
 
-3. **api_usage_log endpoint already correct** — line 204 already says `"serp/google/organic/live/advanced"`. No change needed.
+```typescript
+// Clean up previously stored competitors that are now on the blocklist
+const { data: existingCompetitors } = await supabase
+  .from("competitors")
+  .select("id, domain")
+  .eq("client_id", client_id);
 
-4. **Remove debug variables** (lines 125-128): Remove `serpErrors`, `firstSerpRawResponse`, `firstSerpItemCount`, `firstSerpStatus` declarations.
+if (existingCompetitors && existingCompetitors.length > 0) {
+  const blockedIds = existingCompetitors
+    .filter((c) => isBlocked(c.domain))
+    .map((c) => c.id);
+  if (blockedIds.length > 0) {
+    await supabase.from("competitors").delete().in("id", blockedIds);
+    console.log(`Removed ${blockedIds.length} blocked competitor(s)`);
+  }
+}
+```
 
-5. **Remove debug capture** (lines 155-159): Remove the `if (taskCount === 1)` block.
-
-6. **Remove serpErrors push** (line 174): Remove the `serpErrors.push(...)` line from the catch block.
-
-7. **Clean response** (lines 214-229): Return only `{ competitors: allCompetitors }` — remove the entire `debug` object.
-
-8. **Redeploy** the edge function.
+No other changes. Redeploy after editing.
 
