@@ -92,13 +92,13 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
     }
   }, []);
 
-  const handleConnectGsc = async () => {
+  const handleConnectGsc = async (forClient?: boolean) => {
     setConnectingGsc(true);
     try {
       const redirectUri = window.location.origin;
-      const { data } = await supabase.functions.invoke("gsc-auth", {
-        body: { action: "get_auth_url", redirect_uri: redirectUri },
-      });
+      const body: any = { action: "get_auth_url", redirect_uri: redirectUri };
+      if (forClient) body.client_id = client.id;
+      const { data } = await supabase.functions.invoke("gsc-auth", { body });
       if (data?.auth_url) {
         window.location.href = data.auth_url;
       }
