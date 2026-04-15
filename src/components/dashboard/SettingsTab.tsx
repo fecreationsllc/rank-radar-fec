@@ -69,11 +69,12 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
   // Handle GSC OAuth callback
   useEffect(() => {
     const code = searchParams.get("code");
+    const stateParam = searchParams.get("state");
     if (code) {
       setConnectingGsc(true);
       const redirectUri = window.location.origin;
       supabase.functions.invoke("gsc-auth", {
-        body: { action: "exchange_code", code, redirect_uri: redirectUri },
+        body: { action: "exchange_code", code, redirect_uri: redirectUri, state: stateParam },
       }).then(({ data, error }) => {
         if (error || data?.error) {
           toast({ title: "GSC connection failed", description: data?.error || error?.message, variant: "destructive" });
@@ -85,6 +86,7 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
         // Clean URL
         searchParams.delete("code");
         searchParams.delete("scope");
+        searchParams.delete("state");
         setSearchParams(searchParams, { replace: true });
       });
     }
