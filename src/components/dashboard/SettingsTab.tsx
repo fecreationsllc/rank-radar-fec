@@ -108,10 +108,12 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
     }
   };
 
-  const handleDisconnectGsc = async () => {
-    await supabase.functions.invoke("gsc-auth", { body: { action: "disconnect" } });
+  const handleDisconnectGsc = async (forClient?: boolean) => {
+    const body: any = { action: "disconnect" };
+    if (forClient) body.client_id = client.id;
+    await supabase.functions.invoke("gsc-auth", { body });
     refetchGscStatus();
-    toast({ title: "GSC disconnected" });
+    toast({ title: forClient ? "Client GSC disconnected" : "GSC disconnected" });
   };
 
   const handleSave = async () => {
