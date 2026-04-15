@@ -16,11 +16,15 @@ serve(async (req) => {
       throw new Error("Google OAuth credentials not configured");
     }
 
-    const { action, code, redirect_uri } = await req.json();
+    const { action, code, redirect_uri, client_id, state } = await req.json();
+    const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     if (action === "get_auth_url") {
       const scopes = "https://www.googleapis.com/auth/webmasters.readonly";
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}&redirect_uri=${encodeURIComponent(redirect_uri)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent`;
+      // Encode client_id in state so we know which client to link after redirect
+      const oauthState = client_id ? JSON.stringify({ client_id }) : "";
+      const stateParam = oauthState ? `&state=${encodeURIComponent(oauthState)}` : "";
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}&redirect_uri=${encodeURIComponent(redirect_uri)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent${stateParam}`;
       return new Response(JSON.stringify({ auth_url: authUrl }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -28,6 +32,15 @@ serve(async (req) => {
 
     if (action === "exchange_code") {
       if (!code) throw new Error("Authorization code is required");
+
+      // Parse client_id from state param if present
+      let targetClientId = client_id;
+      if (!targetClientId && state) {
+        try {
+          const parsed = JSON.parse(state);
+          targetClientId = parsed.client_id;
+        } catch { /* ignore */ }
+      }
 
       const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -50,42 +63,65 @@ serve(async (req) => {
       const tokens = await tokenRes.json();
       const expiresAt = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString();
 
-      const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      if (targetClientId) {
+        // Per-client connection: upsert into client_gsc_connections
+        await sb.from("client_gsc_connections").upsert({
+          client_id: targetClientId,
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          token_expires_at: expiresAt,
+        }, { onConflict: "client_id" });
+      } else {
+        // Global connection
+        await sb.from("gsc_connections").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+        await sb.from("gsc_connections").insert({
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          token_expires_at: expiresAt,
+        });
+      }
 
-      // Delete existing connections and insert new one
-      await sb.from("gsc_connections").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      await sb.from("gsc_connections").insert({
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        token_expires_at: expiresAt,
-      });
-
-      // Log API usage
       await sb.from("api_usage_log").insert({
         function_name: "gsc-auth",
         api_provider: "google",
         endpoint: "oauth2/token",
         task_count: 1,
         cost_usd: 0,
+        client_id: targetClientId || null,
       });
 
-      return new Response(JSON.stringify({ success: true }), {
+      return new Response(JSON.stringify({ success: true, client_id: targetClientId || null }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (action === "disconnect") {
-      const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      await sb.from("gsc_connections").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      if (client_id) {
+        await sb.from("client_gsc_connections").delete().eq("client_id", client_id);
+      } else {
+        await sb.from("gsc_connections").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      }
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (action === "status") {
-      const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-      const { data } = await sb.from("gsc_connections").select("id, created_at").limit(1).single();
-      return new Response(JSON.stringify({ connected: !!data, connected_at: data?.created_at }), {
+      const { data: globalConn } = await sb.from("gsc_connections").select("id, created_at").limit(1).single();
+      
+      if (client_id) {
+        const { data: clientConn } = await sb.from("client_gsc_connections").select("client_id, created_at").eq("client_id", client_id).single();
+        return new Response(JSON.stringify({
+          client_connected: !!clientConn,
+          client_connected_at: clientConn?.created_at ?? null,
+          global_connected: !!globalConn,
+          global_connected_at: globalConn?.created_at ?? null,
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ connected: !!globalConn, connected_at: globalConn?.created_at }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

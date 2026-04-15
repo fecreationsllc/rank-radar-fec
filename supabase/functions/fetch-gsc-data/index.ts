@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-async function refreshToken(sb: any, connection: any): Promise<string> {
+async function refreshToken(sb: any, connection: any, table: string, matchColumn: string, matchValue: string): Promise<string> {
   if (new Date(connection.token_expires_at) > new Date(Date.now() + 60000)) {
     return connection.access_token;
   }
@@ -29,10 +29,10 @@ async function refreshToken(sb: any, connection: any): Promise<string> {
   const tokens = await res.json();
   const expiresAt = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString();
 
-  await sb.from("gsc_connections").update({
+  await sb.from(table).update({
     access_token: tokens.access_token,
     token_expires_at: expiresAt,
-  }).eq("id", connection.id);
+  }).eq(matchColumn, matchValue);
 
   return tokens.access_token;
 }
@@ -46,15 +46,37 @@ serve(async (req) => {
 
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // Get GSC connection
-    const { data: connection } = await sb.from("gsc_connections").select("*").limit(1).single();
+    // Try client-specific connection first, fall back to global
+    let connection: any = null;
+    let tokenTable = "";
+    let tokenMatchCol = "";
+    let tokenMatchVal = "";
+
+    const { data: clientConn } = await sb.from("client_gsc_connections").select("*").eq("client_id", client_id).single();
+    if (clientConn) {
+      connection = clientConn;
+      tokenTable = "client_gsc_connections";
+      tokenMatchCol = "client_id";
+      tokenMatchVal = client_id;
+      console.log("Using client-specific GSC connection");
+    } else {
+      const { data: globalConn } = await sb.from("gsc_connections").select("*").limit(1).single();
+      if (globalConn) {
+        connection = globalConn;
+        tokenTable = "gsc_connections";
+        tokenMatchCol = "id";
+        tokenMatchVal = globalConn.id;
+        console.log("Using global GSC connection");
+      }
+    }
+
     if (!connection) throw new Error("Google Search Console not connected");
 
     // Get client domain
     const { data: client } = await sb.from("clients").select("domain").eq("id", client_id).single();
     if (!client) throw new Error("Client not found");
 
-    const accessToken = await refreshToken(sb, connection);
+    const accessToken = await refreshToken(sb, connection, tokenTable, tokenMatchCol, tokenMatchVal);
     const cleanDomain = client.domain.replace(/^(https?:\/\/)?(www\.)?/, "").replace(/\/+$/, "");
 
     // Try both sc-domain and URL prefix formats
