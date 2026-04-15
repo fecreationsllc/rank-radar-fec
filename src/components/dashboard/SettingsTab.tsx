@@ -267,28 +267,49 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
       <Card className="rounded-xl">
         <CardHeader><CardTitle>Google Search Console</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          {gscStatus?.connected ? (
+          {gscStatus?.client_connected ? (
+            /* Client has its own dedicated GSC connection */
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                 <div>
-                  <p className="text-sm font-medium">Connected</p>
+                  <p className="text-sm font-medium">Connected (dedicated)</p>
                   <p className="text-xs text-muted-foreground">
-                    Since {gscStatus.connected_at ? new Date(gscStatus.connected_at).toLocaleDateString() : "recently"}
+                    Since {gscStatus.client_connected_at ? new Date(gscStatus.client_connected_at).toLocaleDateString() : "recently"}
                   </p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={handleDisconnectGsc}>
+              <Button variant="outline" size="sm" onClick={() => handleDisconnectGsc(true)}>
                 <XCircle className="h-4 w-4 mr-1" /> Disconnect
               </Button>
             </div>
+          ) : gscStatus?.global_connected ? (
+            /* No client-specific connection, but global shared connection exists */
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm font-medium">Using shared connection</p>
+                    <p className="text-xs text-muted-foreground">
+                      Connected since {gscStatus.global_connected_at ? new Date(gscStatus.global_connected_at).toLocaleDateString() : "recently"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => handleConnectGsc(true)} disabled={connectingGsc}>
+                {connectingGsc ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                Connect own account
+              </Button>
+            </div>
           ) : (
+            /* Neither connected */
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <XCircle className="h-5 w-5 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Not connected</p>
               </div>
-              <Button onClick={handleConnectGsc} disabled={connectingGsc} size="sm">
+              <Button onClick={() => handleConnectGsc(true)} disabled={connectingGsc} size="sm">
                 {connectingGsc ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
                 Connect Google
               </Button>
