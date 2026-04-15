@@ -233,7 +233,7 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
           )}
           <Button onClick={handleSync} disabled={syncing} variant="outline" size="sm">
             {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-            Sync GSC
+            {syncing ? "Syncing..." : "Sync GSC"}
           </Button>
         </div>
       </div>
