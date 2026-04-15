@@ -154,7 +154,15 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast({ title: "GSC data synced", description: `${data.queries} query rows fetched` });
+      if (!data?.queries || data.queries === 0) {
+        toast({
+          title: "No GSC data found",
+          description: "No data found for this domain. Make sure it's verified in Google Search Console.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "GSC data synced", description: `${data.queries} query rows fetched` });
+      }
       refetch();
     } catch (e: any) {
       toast({ title: "Sync failed", description: e.message, variant: "destructive" });
@@ -225,7 +233,7 @@ export function SearchConsoleTab({ client }: SearchConsoleTabProps) {
           )}
           <Button onClick={handleSync} disabled={syncing} variant="outline" size="sm">
             {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-            Sync GSC
+            {syncing ? "Syncing..." : "Sync GSC"}
           </Button>
         </div>
       </div>
