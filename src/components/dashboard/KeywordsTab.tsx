@@ -13,7 +13,7 @@ import { AddKeywordsModal } from "@/components/dashboard/AddKeywordsModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, RefreshCw, Search, TrendingUp, TrendingDown, Target, Hash, X, Sparkles, ArrowUp, ArrowDown, ArrowUpDown, Download } from "lucide-react";
+import { Plus, RefreshCw, Search, TrendingUp, TrendingDown, Target, Hash, X, Sparkles, ArrowUp, ArrowDown, ArrowUpDown, Download, Info } from "lucide-react";
 import { SuggestKeywordsModal } from "@/components/dashboard/SuggestKeywordsModal";
 import { ImportRankedKeywordsModal } from "@/components/dashboard/ImportRankedKeywordsModal";
 import { Badge } from "@/components/ui/badge";
@@ -390,6 +390,16 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
           {hideNoVolume ? `Show All (${hiddenCount} hidden)` : "Hide No Volume"}
         </Button>
       </div>
+
+      {/* Volume note */}
+      {keywordRows.length > 0 && keywordRows.some(r => r.searchVolume === null && !r.volumeFetched) && (
+        <Card className="rounded-xl border-dashed">
+          <CardContent className="p-3 flex items-center gap-2 text-sm text-muted-foreground">
+            <Info className="h-4 w-4 flex-shrink-0" />
+            Volume data typically updates within 24 hours after adding new keywords.
+          </CardContent>
+        </Card>
+      )}
 
       {/* Sync progress */}
       {syncing && (

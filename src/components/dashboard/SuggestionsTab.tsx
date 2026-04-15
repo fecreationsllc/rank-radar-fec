@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, Sparkles } from "lucide-react";
+import { RefreshCw, Sparkles, Plus, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
 
@@ -25,8 +25,34 @@ interface Suggestion {
 
 export function SuggestionsTab({ client }: SuggestionsTabProps) {
   const [generating, setGenerating] = useState(false);
+  const [addingKeyword, setAddingKeyword] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const { data: trackedKeywords = [] } = useQuery({
+    queryKey: ["tracked-keywords-list", client.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("keywords").select("keyword").eq("client_id", client.id);
+      return (data ?? []).map((k) => k.keyword.toLowerCase());
+    },
+  });
+
+  const handleAddKeyword = async (keyword: string) => {
+    setAddingKeyword(keyword);
+    try {
+      const { error } = await supabase.from("keywords").insert({ client_id: client.id, keyword, status: "monitoring" });
+      if (error) throw error;
+      toast({ title: `"${keyword}" added to tracking` });
+      queryClient.invalidateQueries({ queryKey: ["tracked-keywords-list", client.id] });
+      queryClient.invalidateQueries({ queryKey: ["keywords-with-ranks"] });
+      supabase.functions.invoke("sync-rankings", { body: { client_id: client.id } }).catch(() => {});
+      supabase.functions.invoke("fetch-search-volume", { body: { client_id: client.id } }).catch(() => {});
+    } catch (e: any) {
+      toast({ title: "Failed to add keyword", description: e.message, variant: "destructive" });
+    } finally {
+      setAddingKeyword(null);
+    }
+  };
 
   const { data: latestSuggestion, isLoading } = useQuery({
     queryKey: ["suggestions", client.id],
@@ -96,17 +122,37 @@ export function SuggestionsTab({ client }: SuggestionsTabProps) {
                 <div className="flex-1">
                   <p className="font-semibold text-[15px] text-foreground">{s.title}</p>
                   <p className="text-sm text-muted-foreground mt-1">{s.description}</p>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    <Badge variant={s.impact === "high" ? "default" : "secondary"} className={s.impact === "high" ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-amber-100 text-amber-800 hover:bg-amber-100"}>
-                      {s.impact === "high" ? "High Impact" : "Medium Impact"}
-                    </Badge>
-                    <Badge variant="outline">
-                      {s.effort === "low" ? "Low Effort" : s.effort === "medium" ? "Medium Effort" : "High Effort"}
-                    </Badge>
-                    {s.keywords_affected?.map((kw) => (
-                      <Badge key={kw} variant="secondary" className="text-xs">{kw}</Badge>
-                    ))}
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                     <Badge variant={s.impact === "high" ? "default" : "secondary"} className={s.impact === "high" ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-amber-100 text-amber-800 hover:bg-amber-100"}>
+                       {s.impact === "high" ? "High Impact" : "Medium Impact"}
+                     </Badge>
+                     <Badge variant="outline">
+                       {s.effort === "low" ? "Low Effort" : s.effort === "medium" ? "Medium Effort" : "High Effort"}
+                     </Badge>
+                    {s.keywords_affected?.map((kw) => {
+                      const isTracked = trackedKeywords.includes(kw.toLowerCase());
+                      return (
+                        <Badge key={kw} variant="secondary" className="text-xs">{kw}</Badge>
+                      );
+                    })}
                   </div>
+                  {s.keywords_affected?.some(kw => !trackedKeywords.includes(kw.toLowerCase())) && (
+                    <span className="ml-auto">
+                      {s.keywords_affected.filter(kw => !trackedKeywords.includes(kw.toLowerCase())).map(kw => (
+                        <Button
+                          key={kw}
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-xs ml-1"
+                          disabled={addingKeyword === kw}
+                          onClick={() => handleAddKeyword(kw)}
+                        >
+                          {addingKeyword === kw ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
+                          Track "{kw}"
+                        </Button>
+                      ))}
+                    </span>
+                  )}
                 </div>
               </div>
             </CardContent>
