@@ -109,7 +109,7 @@ export function CompetitorsTab({ client }: CompetitorsTabProps) {
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="font-semibold text-foreground">{comp.domain}</p>
+                      <a href={`https://${comp.domain}`} target="_blank" rel="noopener noreferrer" className="font-semibold text-foreground hover:underline cursor-pointer">{comp.domain}</a>
                       {comp.is_auto_discovered && <Badge variant="secondary" className="mt-1 text-xs">Auto-discovered</Badge>}
                     </div>
                     <button onClick={() => handleRemove(comp.id)} className="text-muted-foreground hover:text-destructive">
