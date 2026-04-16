@@ -43,6 +43,9 @@ export function CompetitorsTab({ client }: CompetitorsTabProps) {
     },
   });
 
+  const visibleCompetitors = competitors.filter(
+    (c) => !BLOCKED_TLDS.some((tld) => c.domain.endsWith(tld))
+  );
   const atLimit = competitors.length >= 6;
 
   const handleDiscover = async () => {
