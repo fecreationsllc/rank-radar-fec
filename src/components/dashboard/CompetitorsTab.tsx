@@ -13,6 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Wand2, X } from "lucide-react";
 
+const BLOCKED_TLDS = [".gov", ".mil"];
+
 interface CompetitorsTabProps {
   client: Tables<"clients">;
 }

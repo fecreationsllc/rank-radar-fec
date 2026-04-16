@@ -7,6 +7,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+const BLOCKED_TLDS = [".gov", ".mil"];
+
 const BLOCKLIST = new Set([
   "yelp.com",
   "yellowpages.com",
@@ -50,6 +52,7 @@ const BLOCKLIST = new Set([
 function isBlocked(domain: string): boolean {
   if (BLOCKLIST.has(domain)) return true;
   if (domain.includes("yelp") || domain.includes("google")) return true;
+  if (BLOCKED_TLDS.some((tld) => domain.endsWith(tld))) return true;
   return false;
 }
 
