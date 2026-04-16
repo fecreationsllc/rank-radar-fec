@@ -13,6 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Wand2, X } from "lucide-react";
 
+const BLOCKED_TLDS = [".gov", ".mil"];
+
 interface CompetitorsTabProps {
   client: Tables<"clients">;
 }
@@ -41,6 +43,9 @@ export function CompetitorsTab({ client }: CompetitorsTabProps) {
     },
   });
 
+  const visibleCompetitors = competitors.filter(
+    (c) => !BLOCKED_TLDS.some((tld) => c.domain.endsWith(tld))
+  );
   const atLimit = competitors.length >= 6;
 
   const handleDiscover = async () => {
@@ -79,7 +84,7 @@ export function CompetitorsTab({ client }: CompetitorsTabProps) {
     <TooltipProvider>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">{competitors.length} / 6 competitors tracked</p>
+          <p className="text-sm text-muted-foreground">{visibleCompetitors.length} / 6 competitors tracked</p>
           <div className="flex gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -104,7 +109,7 @@ export function CompetitorsTab({ client }: CompetitorsTabProps) {
           </div>
         </div>
 
-        {competitors.length === 0 ? (
+        {visibleCompetitors.length === 0 ? (
           <Card className="rounded-xl">
             <CardContent className="py-12 text-center text-muted-foreground">
               <p className="font-medium">No competitors yet</p>
@@ -113,7 +118,7 @@ export function CompetitorsTab({ client }: CompetitorsTabProps) {
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {competitors.map((comp) => (
+            {visibleCompetitors.map((comp) => (
               <Card key={comp.id} className="rounded-xl">
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between">
