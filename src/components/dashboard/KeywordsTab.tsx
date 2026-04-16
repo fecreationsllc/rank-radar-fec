@@ -43,6 +43,9 @@ interface KeywordWithRanks {
   history: (number | null)[];
   searchVolume: number | null;
   volumeFetched: boolean;
+  gscClicks: number | null;
+  gscImpressions: number | null;
+  gscCtr: number | null;
 }
 
 type SortColumn = "keyword" | "landing_page" | "volume" | "today" | "week_change" | "last_week" | "last_month" | "city";
