@@ -144,6 +144,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
           const monthRecord = cityHistory[0];
 
           const vol = volumes.find((v) => v.keyword_id === kw.id && v.city_id === city.id);
+          const gsc = gscMap.get(kw.keyword.toLowerCase());
           rows.push({
             keyword: kw,
             city,
@@ -153,6 +154,9 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
             history: cityHistory.map((h) => h.position),
             searchVolume: vol?.search_volume ?? null,
             volumeFetched: !!vol,
+            gscClicks: gsc ? gsc.clicks : null,
+            gscImpressions: gsc ? gsc.impressions : null,
+            gscCtr: gsc && gsc.count > 0 ? gsc.ctrSum / gsc.count : null,
           });
         }
       }
