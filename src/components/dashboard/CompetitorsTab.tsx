@@ -84,7 +84,7 @@ export function CompetitorsTab({ client }: CompetitorsTabProps) {
     <TooltipProvider>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">{competitors.length} / 6 competitors tracked</p>
+          <p className="text-sm text-muted-foreground">{visibleCompetitors.length} / 6 competitors tracked</p>
           <div className="flex gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
