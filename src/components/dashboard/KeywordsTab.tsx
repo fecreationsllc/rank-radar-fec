@@ -543,6 +543,15 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
                     <TableCell className="text-sm text-muted-foreground">
                       {row.searchVolume !== null ? row.searchVolume.toLocaleString() : row.volumeFetched ? "N/A" : "—"}
                     </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {row.gscClicks !== null ? row.gscClicks.toLocaleString() : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {row.gscImpressions !== null ? row.gscImpressions.toLocaleString() : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {row.gscCtr !== null ? `${(row.gscCtr * 100).toFixed(1)}%` : "—"}
+                    </TableCell>
                     <TableCell>
                       {row.today !== null ? (
                         <PositionBadge position={row.today} />
