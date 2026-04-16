@@ -7,8 +7,9 @@ import { ClientSidebar } from "@/components/dashboard/ClientSidebar";
 import { ClientDashboard } from "@/components/dashboard/ClientDashboard";
 import { AddClientModal } from "@/components/dashboard/AddClientModal";
 import { Button } from "@/components/ui/button";
-import { Radar } from "lucide-react";
+import { Radar, LayoutDashboard } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 export default function Index() {
   const { signOut } = useAuth();
