@@ -43,9 +43,12 @@ interface KeywordWithRanks {
   history: (number | null)[];
   searchVolume: number | null;
   volumeFetched: boolean;
+  gscClicks: number | null;
+  gscImpressions: number | null;
+  gscCtr: number | null;
 }
 
-type SortColumn = "keyword" | "landing_page" | "volume" | "today" | "week_change" | "last_week" | "last_month" | "city";
+type SortColumn = "keyword" | "landing_page" | "volume" | "clicks" | "impressions" | "ctr" | "today" | "week_change" | "last_week" | "last_month" | "city";
 type SortDirection = "asc" | "desc";
 
 export function KeywordsTab({ client }: KeywordsTabProps) {
@@ -99,7 +102,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
       const thirtyDaysAgo = subDays(now, 30).toISOString();
 
       const keywordIds = keywords.map((k) => k.id);
-      const [historyRes, volumeRes] = await Promise.all([
+      const [historyRes, volumeRes, gscRes] = await Promise.all([
         supabase
           .from("rank_history")
           .select("*")
@@ -110,9 +113,26 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
           .from("keyword_search_volume")
           .select("*")
           .in("keyword_id", keywordIds),
+        supabase
+          .from("gsc_query_data")
+          .select("*")
+          .eq("client_id", client.id),
       ]);
       const history = historyRes.data;
       const volumes = volumeRes.data ?? [];
+      const gscRows = gscRes.data ?? [];
+
+      // Aggregate GSC data by query (lowercased)
+      const gscMap = new Map<string, { clicks: number; impressions: number; ctrSum: number; count: number }>();
+      for (const row of gscRows) {
+        const key = row.query.toLowerCase();
+        const existing = gscMap.get(key) ?? { clicks: 0, impressions: 0, ctrSum: 0, count: 0 };
+        existing.clicks += row.clicks ?? 0;
+        existing.impressions += row.impressions ?? 0;
+        existing.ctrSum += Number(row.ctr ?? 0);
+        existing.count += 1;
+        gscMap.set(key, existing);
+      }
 
       const rows: KeywordWithRanks[] = [];
       for (const kw of keywords) {
@@ -124,6 +144,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
           const monthRecord = cityHistory[0];
 
           const vol = volumes.find((v) => v.keyword_id === kw.id && v.city_id === city.id);
+          const gsc = gscMap.get(kw.keyword.toLowerCase());
           rows.push({
             keyword: kw,
             city,
@@ -133,6 +154,9 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
             history: cityHistory.map((h) => h.position),
             searchVolume: vol?.search_volume ?? null,
             volumeFetched: !!vol,
+            gscClicks: gsc ? gsc.clicks : null,
+            gscImpressions: gsc ? gsc.impressions : null,
+            gscCtr: gsc && gsc.count > 0 ? gsc.ctrSum / gsc.count : null,
           });
         }
       }
@@ -148,6 +172,9 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
             history: [],
             searchVolume: null,
             volumeFetched: false,
+            gscClicks: null,
+            gscImpressions: null,
+            gscCtr: null,
           });
         }
       }
@@ -182,6 +209,12 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
           return (a.keyword.target_url ?? "").localeCompare(b.keyword.target_url ?? "") * dir;
         case "volume":
           return nullToEnd(a.searchVolume, b.searchVolume);
+        case "clicks":
+          return nullToEnd(a.gscClicks, b.gscClicks);
+        case "impressions":
+          return nullToEnd(a.gscImpressions, b.gscImpressions);
+        case "ctr":
+          return nullToEnd(a.gscCtr, b.gscCtr);
         case "today":
           return nullToEnd(a.today, b.today);
         case "week_change": {
@@ -447,6 +480,15 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
                 <TableHead className="cursor-pointer select-none" onClick={() => handleSort("volume")}>
                   <span className="flex items-center">Volume <SortIcon col="volume" /></span>
                 </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => handleSort("clicks")}>
+                  <span className="flex items-center">Clicks <SortIcon col="clicks" /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => handleSort("impressions")}>
+                  <span className="flex items-center">Impr. <SortIcon col="impressions" /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => handleSort("ctr")}>
+                  <span className="flex items-center">CTR <SortIcon col="ctr" /></span>
+                </TableHead>
                 <TableHead className="cursor-pointer select-none" onClick={() => handleSort("today")}>
                   <span className="flex items-center">Today <SortIcon col="today" /></span>
                 </TableHead>
@@ -500,6 +542,15 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {row.searchVolume !== null ? row.searchVolume.toLocaleString() : row.volumeFetched ? "N/A" : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {row.gscClicks !== null ? row.gscClicks.toLocaleString() : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {row.gscImpressions !== null ? row.gscImpressions.toLocaleString() : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {row.gscCtr !== null ? `${(row.gscCtr * 100).toFixed(1)}%` : "—"}
                     </TableCell>
                     <TableCell>
                       {row.today !== null ? (
