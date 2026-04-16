@@ -172,6 +172,9 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
             history: [],
             searchVolume: null,
             volumeFetched: false,
+            gscClicks: null,
+            gscImpressions: null,
+            gscCtr: null,
           });
         }
       }
