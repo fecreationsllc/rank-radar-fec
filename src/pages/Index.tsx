@@ -13,7 +13,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 export default function Index() {
   const { signOut } = useAuth();
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(searchParams.get("client"));
   const [addClientOpen, setAddClientOpen] = useState(false);
 
   const { data: clients = [], refetch: refetchClients } = useQuery({
@@ -34,6 +36,17 @@ export default function Index() {
         <div className="flex items-center gap-2 px-4 py-5 border-b border-sidebar-border">
           <Radar className="h-5 w-5" />
           <span className="font-bold text-base">RankRadar</span>
+        </div>
+        <div className="py-1">
+          <button
+            onClick={() => navigate("/overview")}
+            className="w-full text-left px-4 py-2 hover:bg-sidebar-accent/50 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <LayoutDashboard className="h-4 w-4 text-sidebar-foreground/60" />
+              <span className="text-sm font-medium text-sidebar-foreground/80">Overview</span>
+            </div>
+          </button>
         </div>
         <ClientSidebar
           clients={clients}
