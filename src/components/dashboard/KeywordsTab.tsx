@@ -209,6 +209,12 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
           return (a.keyword.target_url ?? "").localeCompare(b.keyword.target_url ?? "") * dir;
         case "volume":
           return nullToEnd(a.searchVolume, b.searchVolume);
+        case "clicks":
+          return nullToEnd(a.gscClicks, b.gscClicks);
+        case "impressions":
+          return nullToEnd(a.gscImpressions, b.gscImpressions);
+        case "ctr":
+          return nullToEnd(a.gscCtr, b.gscCtr);
         case "today":
           return nullToEnd(a.today, b.today);
         case "week_change": {
