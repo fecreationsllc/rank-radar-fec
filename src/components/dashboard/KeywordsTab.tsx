@@ -480,6 +480,15 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
                 <TableHead className="cursor-pointer select-none" onClick={() => handleSort("volume")}>
                   <span className="flex items-center">Volume <SortIcon col="volume" /></span>
                 </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => handleSort("clicks")}>
+                  <span className="flex items-center">Clicks <SortIcon col="clicks" /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => handleSort("impressions")}>
+                  <span className="flex items-center">Impr. <SortIcon col="impressions" /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none" onClick={() => handleSort("ctr")}>
+                  <span className="flex items-center">CTR <SortIcon col="ctr" /></span>
+                </TableHead>
                 <TableHead className="cursor-pointer select-none" onClick={() => handleSort("today")}>
                   <span className="flex items-center">Today <SortIcon col="today" /></span>
                 </TableHead>
