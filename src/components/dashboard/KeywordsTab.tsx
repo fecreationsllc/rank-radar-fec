@@ -48,7 +48,7 @@ interface KeywordWithRanks {
   gscCtr: number | null;
 }
 
-type SortColumn = "keyword" | "landing_page" | "volume" | "today" | "week_change" | "last_week" | "last_month" | "city";
+type SortColumn = "keyword" | "landing_page" | "volume" | "clicks" | "impressions" | "ctr" | "today" | "week_change" | "last_week" | "last_month" | "city";
 type SortDirection = "asc" | "desc";
 
 export function KeywordsTab({ client }: KeywordsTabProps) {
@@ -102,7 +102,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
       const thirtyDaysAgo = subDays(now, 30).toISOString();
 
       const keywordIds = keywords.map((k) => k.id);
-      const [historyRes, volumeRes] = await Promise.all([
+      const [historyRes, volumeRes, gscRes] = await Promise.all([
         supabase
           .from("rank_history")
           .select("*")
@@ -113,9 +113,26 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
           .from("keyword_search_volume")
           .select("*")
           .in("keyword_id", keywordIds),
+        supabase
+          .from("gsc_query_data")
+          .select("*")
+          .eq("client_id", client.id),
       ]);
       const history = historyRes.data;
       const volumes = volumeRes.data ?? [];
+      const gscRows = gscRes.data ?? [];
+
+      // Aggregate GSC data by query (lowercased)
+      const gscMap = new Map<string, { clicks: number; impressions: number; ctrSum: number; count: number }>();
+      for (const row of gscRows) {
+        const key = row.query.toLowerCase();
+        const existing = gscMap.get(key) ?? { clicks: 0, impressions: 0, ctrSum: 0, count: 0 };
+        existing.clicks += row.clicks ?? 0;
+        existing.impressions += row.impressions ?? 0;
+        existing.ctrSum += Number(row.ctr ?? 0);
+        existing.count += 1;
+        gscMap.set(key, existing);
+      }
 
       const rows: KeywordWithRanks[] = [];
       for (const kw of keywords) {
