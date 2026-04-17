@@ -58,7 +58,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
   const [syncing, setSyncing] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
-  const [suggestedKeywords, setSuggestedKeywords] = useState<{ keyword: string; volume: number }[]>([]);
+  const [suggestedKeywords, setSuggestedKeywords] = useState<{ keyword: string; volume: number; isLowVolume?: boolean }[]>([]);
   const [hideNoVolume, setHideNoVolume] = useState(false);
   const [sortColumn, setSortColumn] = useState<SortColumn>("keyword");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -354,7 +354,7 @@ export function KeywordsTab({ client }: KeywordsTabProps) {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      setSuggestedKeywords((data?.keywords ?? []) as { keyword: string; volume: number }[]);
+      setSuggestedKeywords((data?.keywords ?? []) as { keyword: string; volume: number; isLowVolume?: boolean }[]);
     } catch (e) {
       console.error("Suggest keywords error:", e);
       toast({ title: "Failed to get suggestions", description: e instanceof Error ? e.message : "Please try again.", variant: "destructive" });
