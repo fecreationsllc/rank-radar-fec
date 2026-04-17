@@ -128,6 +128,7 @@ export type Database = {
       clients: {
         Row: {
           alert_email: string | null
+          category: string | null
           created_at: string
           domain: string
           id: string
@@ -136,6 +137,7 @@ export type Database = {
         }
         Insert: {
           alert_email?: string | null
+          category?: string | null
           created_at?: string
           domain: string
           id?: string
@@ -144,6 +146,7 @@ export type Database = {
         }
         Update: {
           alert_email?: string | null
+          category?: string | null
           created_at?: string
           domain?: string
           id?: string
