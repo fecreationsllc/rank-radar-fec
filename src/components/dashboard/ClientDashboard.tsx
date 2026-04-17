@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { Tables } from "@/integrations/supabase/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { FileImage } from "lucide-react";
 import { KeywordsTab } from "@/components/dashboard/KeywordsTab";
 import { CompetitorsTab } from "@/components/dashboard/CompetitorsTab";
 import { SuggestionsTab } from "@/components/dashboard/SuggestionsTab";
 import { SettingsTab } from "@/components/dashboard/SettingsTab";
 import { CostsTab } from "@/components/dashboard/CostsTab";
 import { SearchConsoleTab } from "@/components/dashboard/SearchConsoleTab";
+import { ClientSummaryModal } from "@/components/dashboard/ClientSummaryModal";
 
 interface ClientDashboardProps {
   client: Tables<"clients">;
@@ -15,26 +18,35 @@ interface ClientDashboardProps {
 
 export function ClientDashboard({ client, refetchClients }: ClientDashboardProps) {
   const [activeTab, setActiveTab] = useState("keywords");
+  const [summaryOpen, setSummaryOpen] = useState(false);
 
   return (
     <div className="h-full flex flex-col">
       {/* Top bar */}
-      <div className="flex items-center justify-between border-b px-6 py-4">
+      <div className="flex items-center justify-between border-b px-6 py-4 gap-4">
         <div>
           <h1 className="text-xl font-bold text-foreground">{client.name}</h1>
           <p className="text-sm text-muted-foreground">{client.domain}</p>
         </div>
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
-            <TabsTrigger value="keywords">Keywords</TabsTrigger>
-            <TabsTrigger value="competitors">Competitors</TabsTrigger>
-            <TabsTrigger value="search-console">Search Console</TabsTrigger>
-            <TabsTrigger value="suggestions">Suggestions</TabsTrigger>
-            <TabsTrigger value="costs">Costs</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" onClick={() => setSummaryOpen(true)}>
+            <FileImage className="h-4 w-4 mr-1.5" />
+            Client Summary
+          </Button>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList>
+              <TabsTrigger value="keywords">Keywords</TabsTrigger>
+              <TabsTrigger value="competitors">Competitors</TabsTrigger>
+              <TabsTrigger value="search-console">Search Console</TabsTrigger>
+              <TabsTrigger value="suggestions">Suggestions</TabsTrigger>
+              <TabsTrigger value="costs">Costs</TabsTrigger>
+              <TabsTrigger value="settings">Settings</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </div>
+
+      <ClientSummaryModal open={summaryOpen} onOpenChange={setSummaryOpen} client={client} />
 
       {/* Tab content */}
       <div className="flex-1 overflow-auto p-6">
