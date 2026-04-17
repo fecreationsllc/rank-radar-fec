@@ -6,6 +6,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const VOLUME_THRESHOLD_NORMAL = 50;
+const VOLUME_THRESHOLD_LOW = 10;
+const MIN_RESULTS_BEFORE_FALLBACK = 5;
+
 async function fetchPageHtml(url: string): Promise<string | null> {
   try {
     const controller = new AbortController();
@@ -103,6 +107,64 @@ async function fetchSearchVolumes(
   return volumeMap;
 }
 
+async function callAiForKeywords(
+  systemPrompt: string,
+  userContent: string,
+  toolName: string,
+  toolDescription: string,
+  apiKey: string,
+): Promise<string[]> {
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      tools: [{
+        type: "function",
+        function: {
+          name: toolName,
+          description: toolDescription,
+          parameters: {
+            type: "object",
+            properties: {
+              keywords: {
+                type: "array",
+                items: { type: "string" },
+                description: "Array of SEO keywords",
+              },
+            },
+            required: ["keywords"],
+            additionalProperties: false,
+          },
+        },
+      }],
+      tool_choice: { type: "function", function: { name: toolName } },
+    }),
+  });
+
+  if (!response.ok) {
+    const status = response.status;
+    const text = await response.text();
+    console.error(`AI gateway error (${toolName}):`, status, text);
+    const err = new Error(`AI gateway returned ${status}`);
+    (err as any).status = status;
+    throw err;
+  }
+
+  const data = await response.json();
+  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+  if (!toolCall) throw new Error(`No tool call in response (${toolName})`);
+  const parsed = JSON.parse(toolCall.function.arguments);
+  return (parsed.keywords as string[]) ?? [];
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -135,6 +197,8 @@ serve(async (req) => {
     const cityName = primaryCity?.city_name ?? "";
     const locationCode = primaryCity?.location_code ?? 1023191;
 
+    const businessType: string = (client as any).category ?? "";
+
     // Fetch GSC queries not yet tracked (for AI context)
     let gscContext = "";
     const { data: gscRows } = await sb
@@ -152,7 +216,7 @@ serve(async (req) => {
       }
     }
 
-    // Scrape website
+    // ============ PASS A: WEBSITE-DERIVED IDEAS ============
     let websiteContent = "";
     const cleanDomain = client.domain.replace(/^(https?:\/\/)?(www\.)?/, "").replace(/\/+$/, "");
     const homepageUrl = `https://${cleanDomain}`;
@@ -175,100 +239,107 @@ serve(async (req) => {
 
     const hasContent = websiteContent.length > 100;
 
-    const systemPrompt = "You are an SEO keyword research expert. Given a business's existing tracked keywords, analyze gaps in their keyword strategy and suggest 25 additional high-value keywords they should add. Focus on: long-tail variations they're missing, related services not yet covered, local intent keywords, and high-intent commercial terms. If Google Search Console data is provided, strongly prioritize keywords related to real queries users are already using to find the site. Do NOT suggest keywords they already track. Return keywords using the provided tool.";
+    const websiteSystemPrompt = "You are an SEO keyword research expert. Given a business's existing tracked keywords, analyze gaps in their keyword strategy and suggest 25 additional high-value keywords they should add. Focus on: long-tail variations they're missing, related services not yet covered, local intent keywords, and high-intent commercial terms. If Google Search Console data is provided, strongly prioritize keywords related to real queries users are already using to find the site. Do NOT suggest keywords they already track. Return keywords using the provided tool.";
 
-    let userContent = `Business: ${client.name}\nDomain: ${client.domain}\nTarget City: ${cityName}\n\nCurrently tracked keywords:\n${existingList.join(", ")}\n\n`;
+    let websiteUserContent = `Business: ${client.name}\nDomain: ${client.domain}\nTarget City: ${cityName}\n\nCurrently tracked keywords:\n${existingList.join(", ")}\n\n`;
     if (hasContent) {
-      userContent += `--- WEBSITE CONTENT ---\n${websiteContent}---\n\n`;
+      websiteUserContent += `--- WEBSITE CONTENT ---\n${websiteContent}---\n\n`;
     }
-    userContent += gscContext;
-    userContent += hasContent
+    websiteUserContent += gscContext;
+    websiteUserContent += hasContent
       ? `\n\nBased on the website content${gscContext ? ", real GSC queries," : ""} and the gaps in their current keyword list, suggest 25 additional keywords (we will filter by search volume afterward).`
       : `\nSuggest 25 additional keywords that complement their current list.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userContent },
-        ],
-        tools: [{
-          type: "function",
-          function: {
-            name: "suggest_keywords",
-            description: "Return exactly 25 additional SEO keywords the business should track.",
-            parameters: {
-              type: "object",
-              properties: {
-                keywords: {
-                  type: "array",
-                  items: { type: "string" },
-                  description: "Array of 25 SEO keywords",
-                },
-              },
-              required: ["keywords"],
-              additionalProperties: false,
-            },
-          },
-        }],
-        tool_choice: { type: "function", function: { name: "suggest_keywords" } },
-      }),
-    });
+    let websiteIdeas: string[] = [];
+    try {
+      websiteIdeas = await callAiForKeywords(
+        websiteSystemPrompt,
+        websiteUserContent,
+        "suggest_keywords",
+        "Return exactly 25 additional SEO keywords the business should track.",
+        LOVABLE_API_KEY,
+      );
+    } catch (e: any) {
+      if (e.status === 429 || e.status === 402) {
+        return new Response(JSON.stringify({ error: e.status === 429 ? "Rate limited, please try again later." : "Payment required." }), {
+          status: e.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      throw e;
+    }
+    console.log(`[suggest-more-keywords] Pass A (website) returned ${websiteIdeas.length} ideas`);
 
-    if (!response.ok) {
-      const status = response.status;
-      const text = await response.text();
-      console.error("AI gateway error:", status, text);
-      if (status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limited, please try again later." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    // ============ PASS B: CATEGORY + CITY IDEAS ============
+    let categoryCityIdeas: string[] = [];
+    if (businessType && cityName) {
+      const categoryCityPrompt = `Generate 40 keyword ideas for a ${businessType} in ${cityName}. Include variations of: service + city, service + neighborhood names, service + near me, specific service types + city, common customer questions.`;
+      try {
+        categoryCityIdeas = await callAiForKeywords(
+          "You are an SEO keyword research expert specializing in local service businesses. Return only the keyword phrases via the provided tool.",
+          categoryCityPrompt,
+          "suggest_keywords",
+          "Return 40 local-intent SEO keyword ideas for the given business type and city.",
+          LOVABLE_API_KEY,
+        );
+      } catch (e: any) {
+        // Don't fail the whole call if just this pass errors — log and continue.
+        console.error("[suggest-more-keywords] Pass B (category+city) failed:", e.message);
       }
-      if (status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error(`AI gateway returned ${status}`);
+      console.log(`[suggest-more-keywords] Pass B (category="${businessType}", city="${cityName}") returned ${categoryCityIdeas.length} ideas`);
+    } else {
+      console.log(`[suggest-more-keywords] Pass B skipped — missing ${!businessType ? "category" : ""}${!businessType && !cityName ? " and " : ""}${!cityName ? "city" : ""}`);
     }
 
-    const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) throw new Error("No tool call in response");
+    // ============ MERGE + DEDUPE (case-insensitive, exclude already-tracked) ============
+    const seen = new Set<string>(existingList);
+    const merged: string[] = [];
+    for (const kw of [...websiteIdeas, ...categoryCityIdeas]) {
+      const trimmed = kw.trim();
+      if (!trimmed) continue;
+      const lower = trimmed.toLowerCase();
+      if (seen.has(lower)) continue;
+      seen.add(lower);
+      merged.push(trimmed);
+    }
+    console.log(`[suggest-more-keywords] Merged unique ideas after dedupe: ${merged.length}`);
 
-    const parsed = JSON.parse(toolCall.function.arguments);
-    // Filter out any that already exist
-    const aiKeywords = (parsed.keywords as string[]).filter(
-      kw => !existingList.includes(kw.toLowerCase())
-    );
+    // ============ VOLUME LOOKUP ============
+    const volumeMap = await fetchSearchVolumes(merged, locationCode, dfAuth);
 
-    // Fetch search volumes from DataForSEO
-    const volumeMap = await fetchSearchVolumes(aiKeywords, locationCode, dfAuth);
-
-    // Filter to only keywords with volume >= 50 and attach volume
-    const keywordsWithVolume = aiKeywords
-      .map(kw => ({
-        keyword: kw,
-        volume: volumeMap.get(kw.toLowerCase()) ?? 0,
-      }))
-      .filter(k => k.volume >= 50)
+    const allWithVolume = merged
+      .map((kw) => ({ keyword: kw, volume: volumeMap.get(kw.toLowerCase()) ?? 0 }))
       .sort((a, b) => b.volume - a.volume);
 
-    // Log AI cost
-    await sb.from("api_usage_log").insert([
+    const normalPass = allWithVolume.filter((k) => k.volume >= VOLUME_THRESHOLD_NORMAL);
+    console.log(`[suggest-more-keywords] Passed normal threshold (>=${VOLUME_THRESHOLD_NORMAL}): ${normalPass.length}`);
+
+    let resultKeywords: { keyword: string; volume: number; isLowVolume: boolean }[] = normalPass.map((k) => ({
+      ...k,
+      isLowVolume: false,
+    }));
+
+    if (resultKeywords.length < MIN_RESULTS_BEFORE_FALLBACK) {
+      const lowPass = allWithVolume.filter(
+        (k) => k.volume >= VOLUME_THRESHOLD_LOW && k.volume < VOLUME_THRESHOLD_NORMAL,
+      );
+      console.log(`[suggest-more-keywords] Fallback engaged. Adding low-volume (>=${VOLUME_THRESHOLD_LOW} & <${VOLUME_THRESHOLD_NORMAL}): ${lowPass.length}`);
+      resultKeywords = [
+        ...resultKeywords,
+        ...lowPass.map((k) => ({ ...k, isLowVolume: true })),
+      ];
+    }
+
+    console.log(`[suggest-more-keywords] Final result count: ${resultKeywords.length}`);
+
+    // Log API usage
+    const usageRows: any[] = [
       {
         client_id,
         function_name: "suggest-more-keywords",
         api_provider: "lovable_ai",
         endpoint: "v1/chat/completions",
-        task_count: 1,
-        cost_usd: 0.001,
+        task_count: 1 + (categoryCityIdeas.length > 0 ? 1 : 0),
+        cost_usd: 0.001 * (1 + (categoryCityIdeas.length > 0 ? 1 : 0)),
       },
       {
         client_id,
@@ -278,9 +349,10 @@ serve(async (req) => {
         task_count: 1,
         cost_usd: 0.05,
       },
-    ]);
+    ];
+    await sb.from("api_usage_log").insert(usageRows);
 
-    return new Response(JSON.stringify({ keywords: keywordsWithVolume }), {
+    return new Response(JSON.stringify({ keywords: resultKeywords }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
