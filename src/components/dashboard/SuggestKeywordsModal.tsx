@@ -2,11 +2,13 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { Loader2, Sparkles } from "lucide-react";
 
 interface KeywordSuggestion {
   keyword: string;
   volume: number;
+  isLowVolume?: boolean;
 }
 
 interface SuggestKeywordsModalProps {
@@ -59,7 +61,7 @@ export function SuggestKeywordsModal({ open, onOpenChange, keywords, loading, on
             <p className="text-sm text-muted-foreground">Analyzing your website and fetching search volumes…</p>
           </div>
         ) : keywords.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">No keywords found with sufficient search volume (≥50/mo). Your coverage looks good!</p>
+          <p className="text-sm text-muted-foreground py-8 text-center">No keywords found with sufficient search volume. Your coverage looks good!</p>
         ) : (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -69,10 +71,17 @@ export function SuggestKeywordsModal({ open, onOpenChange, keywords, loading, on
               </Button>
             </div>
             <div className="max-h-80 overflow-y-auto space-y-1">
-              {keywords.map(({ keyword, volume }) => (
+              {keywords.map(({ keyword, volume, isLowVolume }) => (
                 <label key={keyword} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 cursor-pointer">
                   <Checkbox checked={selected.has(keyword)} onCheckedChange={() => toggleKeyword(keyword)} />
-                  <span className="text-sm flex-1">{keyword}</span>
+                  <span className="text-sm flex-1 flex items-center gap-2">
+                    {keyword}
+                    {isLowVolume && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-700 border-amber-200">
+                        Low volume
+                      </Badge>
+                    )}
+                  </span>
                   <span className="text-xs text-muted-foreground tabular-nums">{volume.toLocaleString()}/mo</span>
                 </label>
               ))}

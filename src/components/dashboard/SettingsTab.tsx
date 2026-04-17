@@ -24,12 +24,14 @@ interface LocationResult {
 export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
   const [name, setName] = useState(client.name);
   const [domain, setDomain] = useState(client.domain);
+  const [category, setCategory] = useState((client as any).category ?? "");
   const [alertEmail, setAlertEmail] = useState(client.alert_email ?? "");
 
   // Sync local state when client prop changes (e.g. switching clients)
   useEffect(() => {
     setName(client.name);
     setDomain(client.domain);
+    setCategory((client as any).category ?? "");
     setAlertEmail(client.alert_email ?? "");
   }, [client.id]);
   const { toast } = useToast();
@@ -117,7 +119,7 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
   };
 
   const handleSave = async () => {
-    await supabase.from("clients").update({ name, domain, alert_email: alertEmail || null }).eq("id", client.id);
+    await supabase.from("clients").update({ name, domain, category: category || null, alert_email: alertEmail || null } as any).eq("id", client.id);
     refetchClients();
     toast({ title: "Client updated" });
   };
@@ -199,6 +201,11 @@ export function SettingsTab({ client, refetchClients }: SettingsTabProps) {
           <div className="space-y-2">
             <Label>Domain</Label>
             <Input value={domain} onChange={(e) => setDomain(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Business Category</Label>
+            <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="plumber, dentist, hvac contractor…" />
+            <p className="text-xs text-muted-foreground">Used to generate local keyword suggestions for this business type.</p>
           </div>
           <div className="space-y-2">
             <Label>Alert Email</Label>

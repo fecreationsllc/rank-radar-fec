@@ -25,6 +25,7 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [domain, setDomain] = useState("");
+  const [category, setCategory] = useState("");
   const [alertEmail, setAlertEmail] = useState("");
   const [clientId, setClientId] = useState("");
   const [reportToken, setReportToken] = useState("");
@@ -47,6 +48,7 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
     setStep(1);
     setName("");
     setDomain("");
+    setCategory("");
     setAlertEmail("");
     setCitySearch("");
     setCityResults([]);
@@ -57,7 +59,7 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
 
   const handleStep1 = async () => {
     const cleanedDomain = cleanDomain(domain);
-    const { data, error } = await supabase.from("clients").insert({ name, domain: cleanedDomain, alert_email: alertEmail || null }).select().single();
+    const { data, error } = await supabase.from("clients").insert({ name, domain: cleanedDomain, category: category || null, alert_email: alertEmail || null } as any).select().single();
     if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
     setClientId(data.id);
     setReportToken(data.report_token ?? "");
@@ -164,6 +166,11 @@ export function AddClientModal({ open, onOpenChange, onClientCreated }: AddClien
             <div className="space-y-2">
               <Label>Domain</Label>
               <Input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="acmeplumbing.com" />
+            </div>
+            <div className="space-y-2">
+              <Label>Business Category (optional)</Label>
+              <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="plumber, dentist, hvac contractor…" />
+              <p className="text-xs text-muted-foreground">Used to generate better local keyword suggestions.</p>
             </div>
             <div className="space-y-2">
               <Label>Alert Email (optional)</Label>
